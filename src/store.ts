@@ -1,12 +1,12 @@
 import { create } from 'zustand';
 import type { GameState } from './game/types';
-import { newGame, SAVE_KEY, fixLineup, type NewClubInput } from './game/world';
+import { newGame, SAVE_KEY, ensureContracts, ensureNumbers, fixLineup, openAcademy, type NewClubInput } from './game/world';
 import { configureAudio } from './audio';
 import { getLang, setLang as applyLang, tx, type Lang } from './i18n';
 
 export type Screen =
   | 'splash' | 'menu' | 'create' | 'dashboard' | 'squad' | 'tactics' | 'match' | 'transfers' | 'player'
-  | 'training' | 'league' | 'schedule' | 'finance' | 'trophies' | 'settings';
+  | 'training' | 'league' | 'schedule' | 'finance' | 'trophies' | 'settings' | 'club' | 'academy';
 
 interface Store {
   g: GameState | null;
@@ -14,6 +14,9 @@ interface Store {
   screen: Screen;
   params: Record<string, unknown>;
   back: Screen;
+  /** Club shown on the club page, and the screen its Back button returns to. */
+  viewClub: number;
+  clubBack: Screen;
   toast: string | null;
   hasSave: boolean;
   lang: Lang;
@@ -47,6 +50,8 @@ export const useStore = create<Store>((set, get) => ({
   v: 0,
   screen: 'splash',
   params: {},
+  viewClub: -1,
+  clubBack: 'league',
   back: 'dashboard',
   toast: null,
   hasSave: !!readSave(),
@@ -55,7 +60,16 @@ export const useStore = create<Store>((set, get) => ({
     applyLang(l);
     set({ lang: l });
   },
-  go: (screen, params = {}) => set((s) => ({ screen, params, back: s.screen === 'player' ? s.back : s.screen })),
+  go: (screen, params = {}) =>
+    set((s) => ({
+      screen,
+      params,
+      back: s.screen === 'player' ? s.back : s.screen,
+      // coming back from a player profile carries no club id, so the page remembers its own
+      ...(screen === 'club'
+        ? { viewClub: typeof params.id === 'number' ? params.id : s.viewClub, clubBack: s.screen === 'player' || s.screen === 'club' ? s.clubBack : s.screen }
+        : {}),
+    })),
   commit: (fn) => {
     const g = get().g;
     if (!g) return;
@@ -74,6 +88,10 @@ export const useStore = create<Store>((set, get) => ({
     const g = readSave();
     if (!g) return false;
     fixLineup(g);
+    // saves made before shirt numbers and the academy existed get them here
+    ensureNumbers(g);
+    ensureContracts(g);
+    openAcademy(g);
     configureAudio(g.settings);
     set({ g, v: 1, screen: 'dashboard' });
     return true;

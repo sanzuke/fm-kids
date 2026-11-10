@@ -1,39 +1,41 @@
 import { useState } from 'react';
 import { useG, useStore } from '../store';
-import { AttrBars, Avatar, Btn, Coins, LineChart, Modal, Nationality, OvrBadge, PageTitle, PlayerCard, PosBadge, Bar, StatusTags } from './kit';
-import { MAX_EXTRA_POS, P, clubOf, intensiveSession, learnablePositions, listForSale, sellNow, setPosTraining, setTraining, unavailable, userClub, userSquad } from '../game/world';
+import { AttrBars, Avatar, Btn, Coins, LineChart, Modal, Nationality, OvrBadge, PageTitle, PlayerCard, PosBadge, PosBadges, Bar, ShirtNo, StatusTags } from './kit';
+import { ACADEMY, MAX_EXTRA_POS, P, renewalFee, renewContract, clubOf, setNumber, shirtOf, intensiveSession, learnablePositions, listForSale, sellNow, setPosTraining, setTraining, unavailable, userClub, userSquad } from '../game/world';
 import { POSITIONS, ATTRS, ATTR_ICON, ATTR_LABEL, type Attr, type Player, type Pos } from '../game/types';
 import { askPrice } from '../game/world';
 import { divName } from '../game/data';
 import { t, tx } from '../i18n';
+import { sfx } from '../audio';
 
 export function Squad() {
   const g = useG();
   const { go } = useStore();
   const [filter, setFilter] = useState<Pos | 'ALL'>('ALL');
-  const [sort, setSort] = useState<'ovr' | 'pos' | 'age' | 'value'>('ovr');
+  const [sort, setSort] = useState<'ovr' | 'pos' | 'age' | 'value' | 'num'>('ovr');
   const club = userClub(g);
   let sq = userSquad(g);
-  if (filter !== 'ALL') sq = sq.filter((p) => p.pos === filter);
+  if (filter !== 'ALL') sq = sq.filter((p) => p.pos === filter || (p.extraPos ?? []).includes(filter));
   const order = POSITIONS;
-  sq = sq.slice().sort((a, b) => (sort === 'pos' ? order.indexOf(a.pos) - order.indexOf(b.pos) : sort === 'age' ? a.age - b.age : sort === 'value' ? b.value - a.value : b.ovr - a.ovr));
+  sq = sq.slice().sort((a, b) => (sort === 'pos' ? order.indexOf(a.pos) - order.indexOf(b.pos) : sort === 'age' ? a.age - b.age : sort === 'value' ? b.value - a.value : sort === 'num' ? (a.num ?? 99) - (b.num ?? 99) : b.ovr - a.ovr));
   return (
     <div className="wrap fade">
       <PageTitle icon="👥" title={t('Squad')} sub={t('{n} players · tap a player to see their profile', { n: userSquad(g).length })} right={<Btn onClick={() => go('tactics')}>{t('📋 Set lineup')}</Btn>} />
       <div className="row" style={{ marginBottom: 10 }}>
         <div className="seg">{(['ALL', ...POSITIONS] as const).map((p) => <button key={p} className={filter === p ? 'on' : ''} onClick={() => setFilter(p)}>{p === 'ALL' ? t('ALL') : p}</button>)}</div>
         <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} aria-label={t('Sort players')}>
-          <option value="ovr">{t('Sort: Rating')}</option><option value="pos">{t('Sort: Position')}</option><option value="age">{t('Sort: Age')}</option><option value="value">{t('Sort: Value')}</option>
+          <option value="ovr">{t('Sort: Rating')}</option><option value="pos">{t('Sort: Position')}</option><option value="age">{t('Sort: Age')}</option><option value="value">{t('Sort: Value')}</option><option value="num">{t('Sort: Shirt number')}</option>
         </select>
       </div>
       <div className="card scroll-x">
         <table className="t">
-          <thead><tr><th>{t('Player')}</th><th>{t('Nation')}</th><th>{t('Pos')}</th><th>{t('Age')}</th><th>OVR</th><th>POT</th><th>⚡</th><th>🎯</th><th>🤝</th><th>🌀</th><th>🛡️</th><th>❤️</th><th>{t('Value')}</th><th></th></tr></thead>
+          <thead><tr><th>{t('No.|shirt')}</th><th>{t('Player')}</th><th>{t('Nation')}</th><th>{t('Pos')}</th><th>{t('Age')}</th><th>OVR</th><th>POT</th><th>⚡</th><th>🎯</th><th>🤝</th><th>🌀</th><th>🛡️</th><th>❤️</th><th>{t('Value')}</th><th></th></tr></thead>
           <tbody>
             {sq.map((p) => (
               <tr key={p.id} className="click" onClick={() => go('player', { id: p.id })}>
-                <td><div className="row" style={{ flexWrap: 'nowrap' }}><Avatar p={p} color={club.color} size={38} /><div><b>{p.name}</b>{g.tactics.captain === p.id && <span className="tag orange" style={{ marginLeft: 6 }} title={t('Captain')}>C</span>}{p.loan && <span className="tag" style={{ marginLeft: 6 }}>{t('LOAN')}</span>}{g.tactics.lineup.includes(p.id) ? <span className="tag green" style={{ marginLeft: 6 }} title={t('In the starting eleven')}>{t('XI')}</span> : <span className="tag grey" style={{ marginLeft: 6 }} title={t('Substitute')}>{t('SUB')}</span>}<StatusTags p={p} /></div></div></td>
-                <td><Nationality p={p} /></td><td><PosBadge pos={p.pos} /></td><td>{p.age}</td><td><OvrBadge v={p.ovr} /></td><td>{p.pot}</td>
+                <td><ShirtNo p={p} /></td>
+                <td><div className="row" style={{ flexWrap: 'nowrap' }}><Avatar p={p} color={club.color} size={38} /><div><b>{p.name}</b>{g.tactics.captain === p.id && <span className="tag orange" style={{ marginLeft: 6 }} title={t('Captain')}>C</span>}{p.loan && <span className="tag" style={{ marginLeft: 6 }}>{t('LOAN')}</span>}{p.contract === 1 && <span className="tag orange" style={{ marginLeft: 6 }} title={t('Contract ends this season')}>{t('FINAL')}</span>}{g.tactics.lineup.includes(p.id) ? <span className="tag green" style={{ marginLeft: 6 }} title={t('In the starting eleven')}>{t('XI')}</span> : <span className="tag grey" style={{ marginLeft: 6 }} title={t('Substitute')}>{t('SUB')}</span>}<StatusTags p={p} /></div></div></td>
+                <td><Nationality p={p} /></td><td><PosBadges p={p} /></td><td>{p.age}</td><td><OvrBadge v={p.ovr} /></td><td>{p.pot}</td>
                 <td>{p.speed}</td><td>{p.shooting}</td><td>{p.passing}</td><td>{p.dribbling}</td><td>{p.defending}</td><td>{p.stamina}</td>
                 <td><Coins n={p.value} /></td>
                 <td>{p.askPrice ? <span className="tag red">{t('For sale')}</span> : null}</td>
@@ -59,17 +61,35 @@ export function PlayerProfile() {
   const gap = p.pot - p.ovr;
   return (
     <div className="wrap fade">
-      <PageTitle icon="🧒" title={p.name} sub={`${p.pos} · ${t('age {n}', { n: p.age })} · ${club ? club.name : t('Free agent')}${club ? ` (${tx(divName(club.div))})` : ''}`} right={<Btn kind="ghost" onClick={() => go(back === 'player' ? 'squad' : back)}>{t('⬅ Back')}</Btn>} />
+      <PageTitle icon="🧒" title={p.name} sub={`${p.pos} · ${t('age {n}', { n: p.age })} · ${club ? club.name : p.clubId === ACADEMY ? t('Youth academy') : t('Free agent')}${club ? ` (${tx(divName(club.div))})` : ''}`} right={<Btn kind="ghost" onClick={() => go(back === 'player' ? 'squad' : back)}>{t('⬅ Back')}</Btn>} />
       <div className="grid g2">
         <div className="card" style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
           <PlayerCard p={p} color={club?.color} />
-          <div style={{ flex: 1, minWidth: 180 }}>
+          <div style={{ flex: 1, minWidth: 220 }}>
             <div className="row"><b>{t('Overall')}</b><OvrBadge v={p.ovr} /><b>{t('Potential')}</b><OvrBadge v={p.pot} /></div>
             {unavailable(p) || (p.yellows ?? 0) > 0 ? <div className="row" style={{ marginTop: 6 }}><b>{t('Status')}</b><span><StatusTags p={p} /></span><span className="hint">{(p.injury ?? 0) > 0 ? t('Injured: back in {n} matchdays', { n: p.injury ?? 0 }) : (p.ban ?? 0) > 0 ? t('Suspended for the next match') : ''}</span></div> : null}
+            {shirtOf(p) !== undefined && (
+              <div className="row" style={{ marginTop: 6 }}>
+                <b>{t('Shirt number')}</b><ShirtNo p={p} />
+                {mine && (
+                  <select value={p.num} aria-label={t('Change shirt number')} onChange={(e) => { const n = +e.target.value; let err: string | null = null; commit((x) => { err = setNumber(x, p.id, n); }); say(err ?? `${p.name} now wears number ${n}.`); }}>
+                    {Array.from({ length: 99 }, (_, i) => i + 1).map((n) => {
+                      const owner = n === p.num ? undefined : userSquad(g).find((q) => q.num === n);
+                      return <option key={n} value={n}>{n}{owner ? ` ⇄ ${owner.name}` : ''}</option>;
+                    })}
+                  </select>
+                )}
+              </div>
+            )}
             <div className="row" style={{ marginTop: 6 }}><b>{t('Nationality')}</b><Nationality p={p} withName size={20} /></div>
-            <div className="row" style={{ marginTop: 6 }}><b>{t('Positions')}</b><PosBadge pos={p.pos} />{(p.extraPos ?? []).map((x) => <PosBadge key={x} pos={x} />)}{p.posTraining && <span className="chip">{t('📍 Learning {pos}: {n}%', { pos: p.posTraining, n: Math.floor(p.posProgress ?? 0) })}</span>}</div>
+            <div className="row" style={{ marginTop: 6 }}><b>{t('Positions')}</b><PosBadges p={p} />{p.posTraining && <span className="chip">{t('📍 Learning {pos}: {n}%', { pos: p.posTraining, n: Math.floor(p.posProgress ?? 0) })}</span>}</div>
             <p className="hint" style={{ margin: '6px 0' }}>{gap >= 12 ? t('🌟 Big future star!') : gap >= 6 ? t('📈 Will grow nicely.') : gap > 0 ? t('A little room to grow.') : t('Has reached full potential.')}</p>
-            <div className="row"><span className="chip">{t('🪙 Value {n}', { n: p.value })}</span><span className="chip">{t('💵 Wage {n}/wk', { n: p.salary })}</span></div>
+            <div className="row"><span className="chip">{t('🪙 Value {n}', { n: p.value })}</span><span className="chip">{t('💵 Wage {n}/wk', { n: p.salary })}</span>{mine && p.contract !== undefined && <span className="chip">{t('📝 Contract: {n} seasons left', { n: p.contract })}</span>}</div>
+            {mine && p.contract !== undefined && (
+              <div className="row" style={{ marginTop: 6 }}>
+                <Btn small disabled={g.balance < renewalFee(p)} onClick={() => { let err: string | null = null; commit((x) => { err = renewContract(x, p.id); }); if (err) { say(err); sfx.bad(); } else { say(t('{name} renews their contract for 2 more seasons!', { name: p.name })); sfx.good(); } }}>{t('📝 Renew contract (+2 seasons · {fee} coins)', { fee: renewalFee(p) })}</Btn>
+              </div>
+            )}
             <div className="row" style={{ marginTop: 6 }}><span className="chip">{t('⚽ {n} goals', { n: p.goals })}</span><span className="chip">{t('🅰️ {n} assists', { n: p.assists })}</span><span className="chip">{t('🎽 {n} games', { n: p.apps })}</span><span className="chip">{t('⭐ {n} avg', { n: avgRating })}</span></div>
           </div>
         </div>
@@ -97,6 +117,8 @@ export function PlayerProfile() {
                 <Btn kind="green" onClick={() => commit((x) => { x.tactics.captain = p.id; if (!x.tactics.lineup.includes(p.id)) { const i = x.tactics.lineup.findIndex((id) => P(x, id)?.pos === p.pos); if (i >= 0) x.tactics.lineup[i] = p.id; else x.tactics.lineup[x.tactics.lineup.length - 1] = p.id; } say(`${p.name} is the new captain!`); })}>{t('© Make captain')}</Btn>
                 {!p.loan && <Btn kind="red" onClick={() => { setPrice(p.askPrice ?? askPrice(p)); setSellOpen(true); }}>{t('💸 Sell')}</Btn>}
               </>
+            ) : p.clubId === ACADEMY ? (
+              <Btn kind="green" onClick={() => go('academy')}>{t('🌱 Open the academy')}</Btn>
             ) : (
               <Btn kind="green" onClick={() => go('transfers', { focus: p.id })}>{t('💱 Open in transfer market')}</Btn>
             )}
@@ -146,7 +168,7 @@ export function TrainingCenter() {
             <div className="row" style={{ flexWrap: 'nowrap' }}>
               <Avatar p={p} color={userClubColor(g)} size={46} />
               <div className="grow" style={{ minWidth: 0 }}>
-                <b style={{ cursor: 'pointer' }} onClick={() => go('player', { id: p.id })}>{p.name}</b> <PosBadge pos={p.pos} /> {(p.extraPos ?? []).map((x) => <PosBadge key={x} pos={x} />)} <OvrBadge v={p.ovr} />
+                <b style={{ cursor: 'pointer' }} onClick={() => go('player', { id: p.id })}>{p.name}</b> <PosBadges p={p} /> <OvrBadge v={p.ovr} />
                 <div className="hint">{t('Age {n}', { n: p.age })} · POT {p.pot}</div>
               </div>
             </div>

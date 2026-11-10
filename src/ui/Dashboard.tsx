@@ -52,6 +52,9 @@ export function Dashboard() {
                 <Btn kind="blue" onClick={() => go('match', { mode: 'highlights' })}>{t('✨ Highlights')}</Btn>
                 <Btn kind="ghost" onClick={() => go('match', { mode: 'quick' })}>{t('⚡ Quick')}</Btn>
               </div>
+              <div className="row" style={{ marginTop: 8, justifyContent: 'center' }}>
+                <Btn small kind="ghost" onClick={() => go('club', { id: opp.id })}>{t('👀 See opponent squad')}</Btn>
+              </div>
             </>
           ) : step ? (
             <>
@@ -86,7 +89,7 @@ export function Dashboard() {
           {next.length === 0 && <p className="muted">{t('Nothing scheduled.')}</p>}
           {next.map((f) => {
             const o = clubOf(g, f.home === g.userClub ? f.away : f.home)!;
-            return <div key={f.id} className="news"><span>{f.home === g.userClub ? '🏠' : '✈️'}</span><span><b>{o.name}</b> <span className="muted">· {tx(f.label)}</span></span></div>;
+            return <div key={f.id} className="news" style={{ cursor: 'pointer' }} title={t('See squad')} onClick={() => go('club', { id: o.id })}><span>{f.home === g.userClub ? '🏠' : '✈️'}</span><span><b>{o.name}</b> <span className="muted">· {tx(f.label)}</span></span></div>;
           })}
           <div style={{ marginTop: 8 }}><Btn small kind="ghost" onClick={() => go('schedule')}>{t('Full schedule')}</Btn></div>
         </div>

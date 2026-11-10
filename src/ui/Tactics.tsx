@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { useG, useStore } from '../store';
-import { Avatar, Btn, Jersey, OvrBadge, PageTitle, PosBadge, StatusTags } from './kit';
-import { FORMATIONS, FORMATION_IDS, autoLineup, fit } from '../game/formations';
-import { P, fixLineup, unavailable, userClub, userSquad } from '../game/world';
+import { Avatar, Btn, Jersey, OvrBadge, PageTitle, PosBadge, PosBadges, StatusTags } from './kit';
+import { FORMATION_IDS, ZONES, autoLineup, fit, shapeName, slotsOf, zoneFree } from '../game/formations';
+import { P, fixLineup, shirtOf, unavailable, userClub, userSquad } from '../game/world';
 import type { Mentality, Player, Style } from '../game/types';
 import { sfx } from '../audio';
 // `t` is the tactics object in this file, so the translate function is imported as `tt`
 import { t as tt } from '../i18n';
 
 type Ref = { kind: 'slot'; idx: number } | { kind: 'bench'; id: number };
+/** What a drag can end on: a player, or an empty place on the pitch. */
+type Target = Ref | { kind: 'zone'; idx: number };
 
 export function Tactics() {
   const g = useG();
@@ -16,10 +18,10 @@ export function Tactics() {
   const club = userClub(g);
   const [sel, setSel] = useState<Ref | null>(null);
   const [drag, setDrag] = useState<{ ref: Ref; x: number; y: number } | null>(null);
-  const [over, setOver] = useState<Ref | null>(null);
+  const [over, setOver] = useState<Target | null>(null);
   const dragRef = useRef<{ ref: Ref; sx: number; sy: number; moved: boolean } | null>(null);
   const t = g.tactics;
-  const slots = FORMATIONS[t.formation];
+  const slots = slotsOf(t);
   const squad = userSquad(g);
   const bench = squad.filter((p) => !t.lineup.includes(p.id)).sort((a, b) => b.ovr - a.ovr);
 
@@ -49,11 +51,22 @@ export function Tactics() {
     sfx.good();
   };
 
-  const hit = (x: number, y: number): Ref | null => {
+  /** Move a position to an empty place; the place decides the role (CDM, CM, CAM, ...). */
+  const moveSlot = (idx: number, zone: number) => {
+    if (slots[idx].pos === 'GK' || !zoneFree(slots, ZONES[zone])) return;
+    commit((x) => {
+      const next = slotsOf(x.tactics).map((s) => ({ ...s }));
+      next[idx] = { ...ZONES[zone] };
+      x.tactics.slots = next;
+    });
+    sfx.good();
+  };
+
+  const hit = (x: number, y: number): Target | null => {
     const el = document.elementFromPoint(x, y)?.closest('[data-ref]') as HTMLElement | null;
     if (!el) return null;
     const [k, v] = el.dataset.ref!.split(':');
-    return k === 'slot' ? { kind: 'slot', idx: +v } : { kind: 'bench', id: +v };
+    return k === 'slot' ? { kind: 'slot', idx: +v } : k === 'zone' ? { kind: 'zone', idx: +v } : { kind: 'bench', id: +v };
   };
 
   const startDrag = (ref: Ref) => (e: React.PointerEvent) => {
@@ -79,7 +92,10 @@ export function Tactics() {
       if (!d) return;
       if (d.moved) {
         const target = hit(ev.clientX, ev.clientY);
-        if (target && !(target.kind === d.ref.kind && (target.kind === 'slot' ? target.idx === (d.ref as { idx: number }).idx : target.id === (d.ref as { id: number }).id))) {
+        if (target?.kind === 'zone') {
+          if (d.ref.kind === 'slot') moveSlot(d.ref.idx, target.idx);
+          setSel(null);
+        } else if (target && !(target.kind === d.ref.kind && (target.kind === 'slot' ? target.idx === (d.ref as { idx: number }).idx : target.id === (d.ref as { id: number }).id))) {
           swap(d.ref, target);
           setSel(null);
         }
@@ -102,14 +118,21 @@ export function Tactics() {
     commit((x) => {
       const cur = x.tactics.lineup.map((id) => P(x, id));
       x.tactics.formation = f;
+      delete x.tactics.slots;
       x.tactics.lineup = autoLineup(cur, f);
       sfx.good();
     });
 
   const selP = sel ? playerOf(sel) : undefined;
-  const isSame = (a: Ref | null, b: Ref) => !!a && JSON.stringify(a) === JSON.stringify(b);
+  const isSame = (a: Target | null, b: Target) => !!a && JSON.stringify(a) === JSON.stringify(b);
   const lineupPlayers = t.lineup.map((id) => P(g, id)).filter(Boolean);
   const teamOvr = Math.round(lineupPlayers.reduce((s, p, i) => s + p.ovr * fit(p, slots[i].pos), 0) / Math.max(1, lineupPlayers.length));
+
+  // the position being moved (dragged, or tapped) and the empty places it may go to
+  const active = drag ? drag.ref : sel;
+  const moving = active?.kind === 'slot' && slots[active.idx].pos !== 'GK' ? active.idx : -1;
+  const movingP = moving >= 0 ? P(g, t.lineup[moving]) : undefined;
+  const custom = !!t.slots;
 
   const renderToken = (idx: number) => {
     const p = P(g, t.lineup[idx]);
@@ -125,7 +148,7 @@ export function Tactics() {
         style={{ left: `${3 + s.v * 94}%`, top: `${3 + (1 - s.u) * 94}%`, opacity: drag && isSame(drag.ref, ref) ? 0.35 : 1 }}
         onPointerDown={startDrag(ref)}
       >
-        <div className="tok-shirt"><Jersey color={s.pos === 'GK' ? '#22b573' : club.color} color2={club.color2} size={46} /></div>
+        <div className="tok-shirt"><Jersey color={s.pos === 'GK' ? '#22b573' : club.color} color2={club.color2} size={46} num={shirtOf(p)} /></div>
         <span className="tok-pos"><PosBadge pos={s.pos} /></span>
         {t.captain === p.id && <span className="cap">C</span>}
         <span className="nm">{p.name.split(' ')[0]}</span>
@@ -136,11 +159,24 @@ export function Tactics() {
 
   return (
     <div className="wrap fade">
-      <PageTitle icon="📋" title={tt('Formation & Tactics')} sub={tt('Drag players on the pitch (or tap two players to swap them)')} right={<Btn kind="ghost" onClick={() => { commit((x) => { x.tactics.lineup = autoLineup(userSquad(x), x.tactics.formation); fixLineup(x); }); say('Best XI picked!'); }}>{tt('✨ Auto-pick best XI')}</Btn>} />
+      <PageTitle icon="📋" title={tt('Formation & Tactics')} sub={tt('Drag players on the pitch (or tap two players to swap them)')} right={<Btn kind="ghost" onClick={() => { commit((x) => { x.tactics.lineup = autoLineup(userSquad(x), slotsOf(x.tactics)); fixLineup(x); }); say('Best XI picked!'); }}>{tt('✨ Auto-pick best XI')}</Btn>} />
       <div className="grid g2" style={{ alignItems: 'start' }}>
         <div>
           <div className="pitch-wrap" data-testid="pitch">
             <div className="circle-c" /><div className="box top" /><div className="box bot" />
+            {moving >= 0 && ZONES.map((z, i) => {
+              if (!zoneFree(slots, z)) return null;
+              const good = movingP ? fit(movingP, z.pos) >= 0.99 : false;
+              return (
+                <div
+                  key={`z${i}`}
+                  className={`zone ${good ? 'good' : ''} ${over && isSame(over, { kind: 'zone', idx: i }) ? 'over' : ''}`}
+                  data-ref={`zone:${i}`}
+                  style={{ left: `${3 + z.v * 94}%`, top: `${3 + (1 - z.u) * 94}%` }}
+                  onClick={() => { moveSlot(moving, i); setSel(null); }}
+                >{z.pos}</div>
+              );
+            })}
             {slots.map((_, i) => renderToken(i))}
           </div>
           <p className="hint" style={{ textAlign: 'center', marginTop: 6 }}>{tt('⬆ Your team attacks upward · Team rating')} <b>{teamOvr}</b></p>
@@ -148,7 +184,14 @@ export function Tactics() {
         <div className="grid">
           <div className="card">
             <h3>{tt('Formation')}</h3>
-            <div className="seg">{FORMATION_IDS.map((f) => <button key={f} className={t.formation === f ? 'on' : ''} onClick={() => setFormation(f)}>{f}</button>)}</div>
+            <div className="seg">{FORMATION_IDS.map((f) => <button key={f} className={t.formation === f && !custom ? 'on' : ''} onClick={() => setFormation(f)}>{f}</button>)}</div>
+            {custom && (
+              <div className="row" style={{ marginTop: 8 }}>
+                <span className="chip">✏️ {tt('Your own shape: {shape}', { shape: shapeName(slots) })}</span>
+                <Btn small kind="ghost" onClick={() => { commit((x) => { delete x.tactics.slots; }); sfx.good(); }}>{tt('↺ Back to {f}', { f: t.formation })}</Btn>
+              </div>
+            )}
+            <p className="hint" style={{ marginTop: 6 }}>{tt('Drag a player to an empty spot to move the position. The spot decides the role: CDM, CM or CAM in the middle.')}</p>
             <h3 style={{ marginTop: 12 }}>{tt('Attack or defend?')}</h3>
             <div className="seg">
               {([['0', '🛡️ Defend'], ['1', '⚖️ Balanced'], ['2', '⚔️ Attack']] as const).map(([v, l]) => (
@@ -166,7 +209,7 @@ export function Tactics() {
             <h3>{selP ? selP.name : tt('Selected player')}</h3>
             {selP ? (
               <div className="row">
-                <Avatar p={selP} color={club.color} size={50} /><PosBadge pos={selP.pos} /><OvrBadge v={selP.ovr} />
+                <Avatar p={selP} color={club.color} size={50} /><PosBadges p={selP} /><OvrBadge v={selP.ovr} />
                 <Btn small kind="green" disabled={t.captain === selP.id || !t.lineup.includes(selP.id)} onClick={() => commit((x) => { x.tactics.captain = selP.id; say(`${selP.name} is captain!`); })}>{tt('© Captain')}</Btn>
                 <Btn small kind="ghost" onClick={() => go('player', { id: selP.id })}>{tt('Profile')}</Btn>
               </div>
@@ -179,7 +222,7 @@ export function Tactics() {
                 const ref: Ref = { kind: 'bench', id: p.id };
                 return (
                   <div key={p.id} data-ref={`bench:${p.id}`} className={`b ${isSame(sel, ref) ? 'sel' : ''} ${over && isSame(over, ref) ? 'over' : ''} ${unavailable(p) ? 'out' : ''}`} onPointerDown={startDrag(ref)}>
-                    <Avatar p={p} color={club.color} size={36} /><div><b style={{ fontSize: 14 }}>{p.name.split(' ')[0]}</b><div><PosBadge pos={p.pos} /> <OvrBadge v={p.ovr} /><StatusTags p={p} /></div></div>
+                    <Avatar p={p} color={club.color} size={36} /><div><b style={{ fontSize: 14 }}>{shirtOf(p) !== undefined && <span className="muted">{shirtOf(p)} </span>}{p.name.split(' ')[0]}</b><div><PosBadges p={p} /> <OvrBadge v={p.ovr} /><StatusTags p={p} /></div></div>
                   </div>
                 );
               })}
@@ -189,7 +232,7 @@ export function Tactics() {
       </div>
       {drag && (() => {
         const p = playerOf(drag.ref);
-        return p ? <div className="drag-ghost" style={{ left: drag.x, top: drag.y }}><Jersey color={club.color} color2={club.color2} size={56} /><div className="nm" style={{ background: '#1d2b53', color: '#fff', borderRadius: 8, padding: '1px 6px', fontSize: 12, textAlign: 'center' }}>{p.name.split(' ')[0]}</div></div> : null;
+        return p ? <div className="drag-ghost" style={{ left: drag.x, top: drag.y }}><Jersey color={club.color} color2={club.color2} size={56} num={shirtOf(p)} /><div className="nm" style={{ background: '#1d2b53', color: '#fff', borderRadius: 8, padding: '1px 6px', fontSize: 12, textAlign: 'center' }}>{p.name.split(' ')[0]}</div></div> : null;
       })()}
     </div>
   );

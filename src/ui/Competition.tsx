@@ -14,7 +14,9 @@ const Team = ({ g, id, size = 22 }: { g: GameState; id: number; size?: number })
 };
 
 function Bracket({ g, comp }: { g: GameState; comp: 'cup' | 'tournament' }) {
+  const { go } = useStore();
   const fx = g.fixtures.filter((f) => f.comp === comp);
+  const name = (id: number) => <span style={{ fontWeight: id === g.userClub ? 800 : 600, cursor: 'pointer' }} onClick={() => go(id === g.userClub ? 'squad' : 'club', { id })}>{clubOf(g, id)!.name}</span>;
   const rounds = [...new Set(fx.map((f) => f.round))].sort();
   if (!rounds.length) return <p className="muted">{t('Draw not made yet — it starts later this season!')}</p>;
   return (
@@ -27,8 +29,8 @@ function Bracket({ g, comp }: { g: GameState; comp: 'cup' | 'tournament' }) {
             const aw = f.played && !hw;
             return (
               <div key={f.id} className="bm">
-                <div className={hw ? 'w' : ''}><span style={{ fontWeight: f.home === g.userClub ? 800 : 600 }}>{clubOf(g, f.home)!.name}</span><b>{f.played ? f.hg : ''}</b></div>
-                <div className={aw ? 'w' : ''}><span style={{ fontWeight: f.away === g.userClub ? 800 : 600 }}>{clubOf(g, f.away)!.name}</span><b>{f.played ? f.ag : ''}</b></div>
+                <div className={hw ? 'w' : ''}>{name(f.home)}<b>{f.played ? f.hg : ''}</b></div>
+                <div className={aw ? 'w' : ''}>{name(f.away)}<b>{f.played ? f.ag : ''}</b></div>
                 {f.pens && <div style={{ fontSize: 12 }}><span>{t('Penalties')}</span><span>{f.pens[0]}–{f.pens[1]}</span></div>}
               </div>
             );
@@ -63,7 +65,7 @@ export function League() {
             <thead><tr><th>#</th><th>{t('Club')}</th>{['P', 'W', 'D', 'L', 'GF', 'GA', 'GD', 'Pts'].map((h) => <th key={h}>{t(`${h}|table`)}</th>)}</tr></thead>
             <tbody>
               {rows.map((r, i) => (
-                <tr key={r.club} className={r.club === g.userClub ? 'me' : ''}>
+                <tr key={r.club} className={r.club === g.userClub ? 'me click' : 'click'} title={t('See squad')} onClick={() => go(r.club === g.userClub ? 'squad' : 'club', { id: r.club })}>
                   <td>{i + 1}{div > 0 && i < 2 ? ' ⬆️' : ''}{div < 2 && i >= rows.length - 2 ? ' ⬇️' : ''}</td>
                   <td><Team g={g} id={r.club} /></td><td>{r.p}</td><td>{r.w}</td><td>{r.d}</td><td>{r.l}</td><td>{r.gf}</td><td>{r.ga}</td><td>{r.gf - r.ga}</td><td><b>{r.pts}</b></td>
                 </tr>
@@ -102,7 +104,7 @@ export function Schedule() {
   const line = (f: Fixture) => {
     const o = f.home === g.userClub ? f.away : f.home;
     return (
-      <div key={f.id} className="news" style={{ alignItems: 'center' }}>
+      <div key={f.id} className="news" style={{ alignItems: 'center', cursor: 'pointer' }} title={t('See squad')} onClick={() => go('club', { id: o })}>
         <span style={{ width: 24 }}>{f.home === g.userClub ? '🏠' : '✈️'}</span>
         <span className="grow"><b>{clubOf(g, o)!.name}</b> <span className="muted">· {tx(f.label)}</span></span>
         {f.played ? <b>{f.hg}–{f.ag}{f.pens ? ` (${f.pens[0]}–${f.pens[1]}p)` : ''}</b> : <span className="tag">{t('Matchday {n}', { n: f.step + 1 })}</span>}
@@ -125,6 +127,7 @@ export function Schedule() {
           <div className="row">
             <Btn kind="green" onClick={() => go('match', { friendly: { opp, home }, mode: 'watch' })}>{t('▶ Watch')}</Btn>
             <Btn kind="ghost" onClick={() => go('match', { friendly: { opp, home }, mode: 'quick' })}>{t('⚡ Quick')}</Btn>
+            <Btn kind="blue" onClick={() => go('club', { id: opp })}>{t('👀 See squad')}</Btn>
           </div>
           {g.friendlies.slice(0, 4).map((f) => <div key={f.id} className="news"><span>🤝</span><span>{clubOf(g, f.home)!.name} {f.hg}–{f.ag} {clubOf(g, f.away)!.name}</span></div>)}
         </div>

@@ -38,7 +38,7 @@ export interface Player {
   stamina: number;
   value: number;
   salary: number;
-  clubId: number; // -1 = free agent
+  clubId: number; // -1 = free agent, -2 = in the user's youth academy
   skin: number;
   hair: number;
   hairStyle: number;
@@ -57,6 +57,11 @@ export interface Player {
   injury?: number;
   ban?: number;
   yellows?: number;
+  /** whole seasons left on the current contract; renewed or left when it hits 0 (absent on older saves) */
+  contract?: number;
+  /** shirt number, and the club it was given at: a number is only valid at that club (absent on older saves) */
+  num?: number;
+  numClub?: number;
   ovrHistory: number[];
   loan?: { from: number; untilStep: number; share: number; season: number };
   askPrice?: number;
@@ -118,6 +123,8 @@ export interface TableRow {
 
 export interface Tactics {
   formation: FormationId;
+  /** Set once the manager moves a position on the pitch; replaces the formation's standard layout. */
+  slots?: { pos: Pos; u: number; v: number }[];
   lineup: number[];
   mentality: Mentality;
   style: Style;
@@ -194,6 +201,8 @@ export interface GameState {
   gf: number;
   ga: number;
   seasonSummary: SeasonSummary | null;
+  /** set once the youth academy has its first group of players (absent on older saves) */
+  academyOpen?: boolean;
 }
 
 export interface SeasonSummary {

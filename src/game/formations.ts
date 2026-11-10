@@ -37,6 +37,33 @@ export const FORMATIONS: Record<FormationId, Slot[]> = {
 };
 export const FORMATION_IDS = Object.keys(FORMATIONS) as FormationId[];
 
+/**
+ * Every place on the pitch a position may be moved to. Where a player stands decides the role:
+ * a central player is a CDM, CM or CAM depending on how far up the pitch the place is.
+ */
+export const ZONES: Slot[] = [
+  S('LB', 0.24, 0.12), S('CB', 0.2, 0.3), S('CB', 0.19, 0.5), S('CB', 0.2, 0.7), S('RB', 0.24, 0.88),
+  S('LB', 0.38, 0.08), S('CDM', 0.37, 0.3), S('CDM', 0.37, 0.5), S('CDM', 0.37, 0.7), S('RB', 0.38, 0.92),
+  S('LW', 0.51, 0.1), S('CM', 0.5, 0.3), S('CM', 0.5, 0.5), S('CM', 0.5, 0.7), S('RW', 0.51, 0.9),
+  S('LW', 0.67, 0.12), S('CAM', 0.64, 0.3), S('CAM', 0.64, 0.5), S('CAM', 0.64, 0.7), S('RW', 0.67, 0.88),
+  S('ST', 0.8, 0.3), S('ST', 0.82, 0.5), S('ST', 0.8, 0.7),
+];
+
+/** The layout a team plays: the manager's own one if they moved positions, else the formation's. */
+export const slotsOf = (t: { formation: FormationId; slots?: Slot[] }): Slot[] => (t.slots?.length === 11 ? t.slots : FORMATIONS[t.formation]);
+
+/** True when no position of the layout already stands on (or right next to) the zone. */
+export function zoneFree(slots: Slot[], zone: Slot, ignore = -1): boolean {
+  return slots.every((s, i) => i === ignore || Math.abs(s.u - zone.u) > 0.1 || Math.abs(s.v - zone.v) > 0.1);
+}
+
+/** "4-1-3-2" style name of a layout, counted line by line from the back. */
+export function shapeName(slots: Slot[]): string {
+  const lines = [0, 0, 0, 0, 0];
+  for (const s of slots) if (s.pos !== 'GK') lines[s.u < 0.3 ? 0 : s.u < 0.44 ? 1 : s.u < 0.58 ? 2 : s.u < 0.73 ? 3 : 4]++;
+  return lines.filter((n) => n > 0).join('-');
+}
+
 const PAIRS: Record<string, number> = {
   'CB-LB': 0.88, 'CB-RB': 0.88, 'LB-RB': 0.92, 'CDM-CM': 0.94, 'CAM-CM': 0.94, 'CB-CDM': 0.86,
   'CAM-CDM': 0.88, 'LW-RW': 0.93, 'LW-ST': 0.9, 'RW-ST': 0.9, 'CAM-ST': 0.9, 'CAM-LW': 0.9,
@@ -61,8 +88,8 @@ export function effOvr(p: Player, slot: Pos): number {
 }
 
 /** Greedy best XI for a formation. Returns player ids by slot. */
-export function autoLineup(squad: Player[], formation: FormationId): number[] {
-  const slots = FORMATIONS[formation];
+export function autoLineup(squad: Player[], formation: FormationId | Slot[]): number[] {
+  const slots = typeof formation === 'string' ? FORMATIONS[formation] : formation;
   const used = new Set<number>();
   const result: number[] = new Array(slots.length).fill(-1);
   const order = slots.map((_, i) => i).sort((a, b) => (slots[a].pos === 'GK' ? -1 : 0) - (slots[b].pos === 'GK' ? -1 : 0));

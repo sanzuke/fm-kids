@@ -73,6 +73,7 @@ export function makePlayer(r: Rng, id: number, pos: Pos, target: number, minAge:
   const value = calcValue(ovr, pot, age);
   return {
     id, name, age, pos, ovr, pot, ...vals, value, salary: calcSalary(value), clubId,
+    contract: ri(r, 1, 3), // seasons on the first contract
     skin: ri(r, 0, 5), hair: ri(r, 0, 6), hairStyle: ri(r, 0, 3),
     goals: 0, assists: 0, apps: 0, ratingSum: 0, training: null, trainProgress: 0, ovrHistory: [ovr],
     seasonGoals: 0, seasonAssists: 0, seasonApps: 0, seasonRating: 0,

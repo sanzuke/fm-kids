@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "values": [
+    { "id": "match.duration", "label": "Durasi pertandingan (detik)", "value": 180, "min": 90, "max": 360, "step": 10 },
+    { "id": "match.playerSpeed", "label": "Kecepatan pemain", "value": 1, "min": 0.5, "max": 2, "step": 0.05 },
+    { "id": "match.shootChance", "label": "Seringnya menembak", "value": 1, "min": 0.2, "max": 3, "step": 0.05 },
+    { "id": "match.keeperSkill", "label": "Kemampuan kiper", "value": 0.56, "min": 0.2, "max": 0.9, "step": 0.02 },
+    { "id": "match.yellowCard", "label": "Frekuensi kartu kuning", "value": 1, "min": 0, "max": 5, "step": 0.1 },
+    { "id": "match.redCard", "label": "Frekuensi kartu merah", "value": 1, "min": 0, "max": 5, "step": 0.1 },
+    { "id": "match.injuryRisk", "label": "Risiko cedera", "value": 1, "min": 0, "max": 5, "step": 0.1 },
+    { "id": "training.weeklyProgress", "label": "Kemajuan latihan per pekan", "value": 7, "min": 2, "max": 20, "step": 1 },
+    { "id": "academy.growthChance", "label": "Kemajuan akademi", "value": 0.14, "min": 0, "max": 0.5, "step": 0.02 },
+    { "id": "reward.winCoins", "label": "Hadiah kemenangan (koin)", "value": 120, "min": 20, "max": 500, "step": 10 }
+  ]
+}

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useG, useStore } from '../store';
-import { Btn, Logo, Modal, OvrBadge, PosBadge } from './kit';
+import { Btn, Logo, Modal, OvrBadge, PosBadge, ShirtNo } from './kit';
 import { MatchEngine, type MatchResult, MATCH_SECONDS } from '../game/engine';
 import { MatchController, type MatchMode } from '../match/controller';
 import { finishUserMatch, matchSetups, playFriendly, userFixture, P, type UserMatchOutcome } from '../game/world';
@@ -245,7 +245,7 @@ export function MatchScreen() {
             <Btn small kind="red" onClick={() => { ctl.skipToEnd(); setS(snap(ctl)); }}>{t('⏩ Skip to end')}</Btn>
           </>
         )}
-        <span className="hint" style={{ marginLeft: 'auto' }}>{Math.round((e.time / MATCH_SECONDS) * 100)}%</span>
+        <span className="hint" style={{ marginLeft: 'auto' }}>{Math.round((e.time / MATCH_SECONDS()) * 100)}%</span>
       </div>
 
       {subOpen && (
@@ -254,13 +254,13 @@ export function MatchScreen() {
           {subOut === null ? (
             field.map((a) => (
               <div key={a.id} className="prow" onClick={() => setSubOut(a.slot)}>
-                <PosBadge pos={a.slotPos} /><div className="grow"><div className="nm">{a.player.name}</div><div className="sub">{t('Energy {n}%', { n: Math.round(a.energy * 100) })}</div></div><OvrBadge v={a.player.ovr} />
+                <PosBadge pos={a.slotPos} /><ShirtNo p={a.player} /><div className="grow"><div className="nm">{a.player.name}</div><div className="sub">{t('Energy {n}%', { n: Math.round(a.energy * 100) })}</div></div><OvrBadge v={a.player.ovr} />
               </div>
             ))
           ) : benchP.length ? (
             benchP.map((p) => (
               <div key={p.id} className="prow" onClick={() => doSub(p.id)}>
-                <PosBadge pos={p.pos} /><div className="grow"><div className="nm">{p.name}</div></div><OvrBadge v={p.ovr} />
+                <PosBadge pos={p.pos} /><ShirtNo p={p} /><div className="grow"><div className="nm">{p.name}</div></div><OvrBadge v={p.ovr} />
               </div>
             ))
           ) : <p>{t('No substitutes available.')}</p>}

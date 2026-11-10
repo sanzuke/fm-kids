@@ -1,12 +1,18 @@
 import type { Attr, Club, Fixture, GameState, Player, Pos, Step, TableRow } from './types';
 import { ATTRS, ATTR_LABEL } from './types';
-import { autoLineup, fit, FORMATIONS } from './formations';
+import { autoLineup, fit, slotsOf } from './formations';
 import { calcOvr, calcSalary, calcValue, clamp, createWorld, divName, makePlayer, mulberry, ri, SQUAD_SHAPE } from './data';
+import { tv } from './tuning';
 import { simulate, type MatchResult, type Setup } from './engine';
 
 export const MAX_SQUAD = 24;
 export const MIN_SQUAD = 14;
 export const SAVE_KEY = 'kfm-save-v1';
+/** clubId of a player who is in the user's youth academy, not yet in the first team. */
+export const ACADEMY = -2;
+export const ACADEMY_MAX = 8;
+/** Oldest age allowed in the academy; older players must have been promoted or they leave. */
+export const ACADEMY_AGE = 18;
 
 const R = Math.random;
 const rnd = (a: number, b: number) => Math.floor(R() * (b - a + 1)) + a;
@@ -17,6 +23,7 @@ export const clubOf = (g: GameState, id: number): Club | undefined => g.clubs[id
 export const userClub = (g: GameState) => g.clubs[g.userClub];
 export const squadOf = (g: GameState, clubId: number) => g.players.filter((p) => p.clubId === clubId);
 export const userSquad = (g: GameState) => squadOf(g, g.userClub);
+export const academyOf = (g: GameState) => squadOf(g, ACADEMY);
 /** Yellow cards in a season that bring a one-match ban. */
 export const YELLOW_LIMIT = 3;
 export const unavailable = (p: Player) => (p.injury ?? 0) > 0 || (p.ban ?? 0) > 0;
@@ -66,6 +73,8 @@ export function newGame(inp: NewClubInput): GameState {
   g.cards = sq.map((p) => p.id);
   g.tactics.lineup = autoLineup(sq, g.tactics.formation);
   g.tactics.captain = best(sq.filter((p) => g.tactics.lineup.includes(p.id)))?.id ?? sq[0].id;
+  ensureNumbers(g);
+  openAcademy(g);
   startSeason(g);
   pushNews(g, 'info', `Welcome, Manager ${inp.manager}! ${inp.name} is ready for its first season.`);
   return g;
@@ -159,6 +168,11 @@ function prepareStep(g: GameState) {
   }
 }
 
+/** The eleven a computer club is expected to start with (what the user would face). */
+export function expectedLineup(g: GameState, clubId: number): number[] {
+  return autoLineup(pickable(squadOf(g, clubId)), g.clubs[clubId].formation);
+}
+
 export function sortTable(rows: TableRow[]): TableRow[] {
   return rows.slice().sort((a, b) => b.pts - a.pts || b.gf - b.ga - (a.gf - a.ga) || b.gf - a.gf || a.club - b.club);
 }
@@ -178,7 +192,7 @@ export function fixLineup(g: GameState) {
   const sq = pickable(userSquad(g));
   const ids = new Set(sq.map((p) => p.id));
   const t = g.tactics;
-  const slots = FORMATIONS[t.formation];
+  const slots = slotsOf(t);
   const seen = new Set<number>();
   const cleaned = slots.map((_, i) => {
     const id = t.lineup[i];
@@ -190,7 +204,7 @@ export function fixLineup(g: GameState) {
   });
   if (cleaned.includes(-1)) {
     const rest = sq.filter((p) => !seen.has(p.id));
-    const auto = autoLineup([...rest], t.formation);
+    const auto = autoLineup([...rest], slots);
     const pool = rest.slice();
     cleaned.forEach((id, i) => {
       if (id !== -1) return;
@@ -226,6 +240,7 @@ export function makeSetup(g: GameState, clubId: number, kit: 'home' | 'away', vs
   const club = g.clubs[clubId];
   const isUser = clubId === g.userClub;
   let formation = club.formation;
+  let slots: Setup['slots'];
   let lineupIds: number[];
   let mentality: Setup['mentality'] = 1;
   let style: Setup['style'] = 'short';
@@ -234,6 +249,7 @@ export function makeSetup(g: GameState, clubId: number, kit: 'home' | 'away', vs
   if (isUser) {
     fixLineup(g);
     formation = g.tactics.formation;
+    slots = slotsOf(g.tactics);
     lineupIds = g.tactics.lineup;
     mentality = g.tactics.mentality;
     style = g.tactics.style;
@@ -245,6 +261,16 @@ export function makeSetup(g: GameState, clubId: number, kit: 'home' | 'away', vs
     captain = best(lineupIds.map((id) => P(g, id)))?.id ?? -1;
   }
   const lineup = lineupIds.map((id) => P(g, id));
+  if (lineup.some((p) => !p)) {
+    // safety net: fill empty slots so a match can always be played
+    const pool = pickable(sq).filter((p) => !lineupIds.includes(p.id));
+    for (let i = 0; i < lineup.length; i++) {
+      if (!lineup[i]) {
+        const p = pool.shift();
+        if (p) lineup[i] = p;
+      }
+    }
+  }
   const bench = sq.filter((p) => !lineupIds.includes(p.id) && !unavailable(p)).sort((a, b) => b.ovr - a.ovr).slice(0, 7);
   let color = club.color;
   let color2 = club.color2;
@@ -253,7 +279,7 @@ export function makeSetup(g: GameState, clubId: number, kit: 'home' | 'away', vs
     color2 = club.awayColor2;
   }
   void vs;
-  return { clubId, name: club.name, color, color2, gkColor: '#22b573', formation, mentality, style, lineup, bench, captainId: captain, isUser };
+  return { clubId, name: club.name, color, color2, gkColor: '#22b573', formation, slots, mentality, style, lineup, bench, captainId: captain, isUser };
 }
 
 /** Pick kits so shirts do not clash. */
@@ -369,7 +395,8 @@ export function finishUserMatch(g: GameState, f: Fixture, res: MatchResult): Use
   const lines: string[] = [];
   let reward = 0;
   const club = userClub(g);
-  const bonus = outcome === 'win' ? 120 : outcome === 'draw' ? 40 : 20;
+  const win = tv('reward.winCoins');
+  const bonus = outcome === 'win' ? win : outcome === 'draw' ? Math.round(win / 3) : Math.round(win / 6);
   reward += bonus;
   addMoney(g, bonus, `${f.comp === 'friendly' ? 'Friendly' : 'Match'} reward (${outcome})`);
   lines.push(`🪙 Match reward +${bonus}`);
@@ -471,7 +498,7 @@ function weekly(g: GameState) {
     trainPosition(g, p);
     if (!p.training) continue;
     const ageF = p.age <= 20 ? 1.3 : p.age <= 25 ? 1.1 : p.age <= 30 ? 0.8 : 0.5;
-    p.trainProgress += (7 + g.facilities.training * 2.5 + rnd(0, 4)) * ageF;
+    p.trainProgress += (tv('training.weeklyProgress') + g.facilities.training * 2.5 + rnd(0, 4)) * ageF;
     applyTrainProgress(g, p);
   }
   // loans
@@ -485,6 +512,8 @@ function weekly(g: GameState) {
   g.offers = g.offers.filter((o) => g.step - o.step < 3);
   genOffers(g);
   aiTransfers(g);
+  trainAcademy(g);
+  ensureNumbers(g);
   g.balanceHistory.push(g.balance);
   if (g.balanceHistory.length > 60) g.balanceHistory.shift();
   fixLineup(g);
@@ -574,7 +603,7 @@ export function contractDemand(p: Player) {
   return { wage: Math.max(1, Math.round(p.salary * (1.0 + 0.1 * (p.id % 4)))), years: 1 + (p.id % 4) };
 }
 export function marketList(g: GameState): Player[] {
-  return g.players.filter((p) => p.clubId !== g.userClub);
+  return g.players.filter((p) => p.clubId !== g.userClub && p.clubId !== ACADEMY);
 }
 
 export type Neg = { status: 'accepted' | 'counter' | 'rejected'; counter?: number; msg: string };
@@ -609,12 +638,14 @@ export function buyPlayer(g: GameState, pid: number, fee: number, wage: number):
   const from = p.clubId;
   p.clubId = g.userClub;
   p.salary = wage;
+  p.contract = contractDemand(p).years;
   delete p.loan;
   delete p.askPrice;
   addMoney(g, -fee, `Signed ${p.name}`);
   if (!g.cards.includes(p.id)) g.cards.push(p.id);
   pushNews(g, 'in', `${p.name} joins ${userClub(g).name}${from >= 0 ? ` from ${g.clubs[from].name}` : ' as a free agent'}! ${fee ? `(${fee} coins)` : ''}`);
   g.offers = g.offers.filter((o) => o.playerId !== pid);
+  ensureNumbers(g);
   checkAchievements(g);
   return null;
 }
@@ -638,6 +669,7 @@ export function loanPlayer(g: GameState, pid: number, weeks: number, share: numb
   addMoney(g, -fee, `Loan fee for ${p.name}`);
   if (!g.cards.includes(p.id)) g.cards.push(p.id);
   pushNews(g, 'loan', `${p.name} joins on loan from ${g.clubs[from].name} for ${weeks} weeks.`);
+  ensureNumbers(g);
   return null;
 }
 
@@ -654,6 +686,7 @@ export function sellNow(g: GameState, pid: number, amount: number, to?: number):
   const buyers = g.clubs.filter((c) => !c.isUser);
   const club = to !== undefined ? g.clubs[to] : buyers[rnd(0, buyers.length - 1)];
   p.clubId = club.id;
+  p.contract = 1 + (p.id % 3); // the buyer signs them on a fresh deal
   delete p.askPrice;
   addMoney(g, amount, `Sold ${p.name}`);
   pushNews(g, 'out', `${p.name} leaves ${userClub(g).name} for ${club.name} (${amount} coins).`);
@@ -698,7 +731,7 @@ function genOffers(g: GameState) {
 function aiTransfers(g: GameState) {
   for (let k = 0; k < 2; k++) {
     const p = g.players[rnd(0, g.players.length - 1)];
-    if (p.clubId === g.userClub || p.loan) continue;
+    if (p.clubId === g.userClub || p.clubId === ACADEMY || p.loan) continue;
     const dest = g.clubs.filter((c) => !c.isUser && c.id !== p.clubId);
     const to = dest[rnd(0, dest.length - 1)];
     if (p.clubId >= 0) {
@@ -713,6 +746,137 @@ function aiTransfers(g: GameState) {
     pushNews(g, 'info', `${p.name} (${p.pos}, ${p.ovr}) signs for ${to.name}${from >= 0 ? ` from ${g.clubs[from].name}` : ' as a free agent'}.`);
     break;
   }
+}
+
+// ---------- shirt numbers ----------
+/** The numbers a position likes to wear, most wanted first. */
+const SHIRTS: Record<Pos, number[]> = {
+  GK: [1], CB: [4, 5], LB: [3], RB: [2], CDM: [6], CM: [8, 6], CAM: [10], LW: [11, 7], RW: [7, 11], ST: [9, 10],
+};
+
+/** Give every club player a shirt number that nobody else at the club wears. Players who keep a valid number are left alone. */
+export function ensureNumbers(g: GameState) {
+  for (const c of g.clubs) {
+    const taken = new Set<number>();
+    const need: Player[] = [];
+    for (const p of squadOf(g, c.id)) {
+      if (p.num && p.numClub === c.id && !taken.has(p.num)) taken.add(p.num);
+      else need.push(p);
+    }
+    // the best players pick first, so the starters get the classic numbers
+    need.sort((a, b) => b.ovr - a.ovr);
+    for (const p of need) {
+      let n = SHIRTS[p.pos].find((x) => !taken.has(x));
+      if (n === undefined) {
+        n = 12;
+        while (taken.has(n) && n < 99) n++;
+      }
+      p.num = n;
+      p.numClub = c.id;
+      taken.add(n);
+    }
+  }
+}
+
+/** The shirt number shown for a player, or undefined when they have no club. */
+export const shirtOf = (p: Pick<Player, 'num' | 'numClub' | 'clubId'>) => (p.clubId >= 0 && p.numClub === p.clubId ? p.num : undefined);
+
+/** Old saves had no contracts; hand those out once. New players get one when they are created. */
+export function ensureContracts(g: GameState) {
+  for (const p of g.players) {
+    if (p.clubId >= 0 && p.contract === undefined) p.contract = 1 + (p.id % 3);
+  }
+}
+
+export const renewalFee = (p: Player) => Math.max(30, Math.round((p.value * 0.1) / 10) * 10);
+
+/** Extend a contract by 2 seasons for a signing bonus. */
+export function renewContract(g: GameState, pid: number): string | null {
+  const p = P(g, pid);
+  if (!p || p.clubId !== g.userClub) return 'Only your own players can renew.';
+  const fee = renewalFee(p);
+  if (g.balance < fee) return 'Not enough coins for the signing bonus.';
+  addMoney(g, -fee, `Contract renewal bonus for ${p.name}`);
+  p.contract = Math.min(4, (p.contract ?? 0) + 2);
+  return null;
+}
+
+/** Change a user player's number. If a team-mate wears it, the two swap. */
+export function setNumber(g: GameState, pid: number, n: number): string | null {
+  const p = P(g, pid);
+  if (!p || p.clubId !== g.userClub) return 'Only your own players can change number.';
+  if (!Number.isInteger(n) || n < 1 || n > 99) return 'Pick a number from 1 to 99.';
+  const other = userSquad(g).find((q) => q.id !== pid && q.num === n);
+  if (other) other.num = p.num;
+  p.num = n;
+  p.numClub = g.userClub;
+  return null;
+}
+
+// ---------- youth academy ----------
+/** How many young players join the academy each season. */
+export const academyIntakeSize = (lvl: number) => 2 + (lvl >= 3 ? 1 : 0) + (lvl >= 5 ? 1 : 0);
+
+function academyIntake(g: GameState, r: () => number, used: Set<string>) {
+  const lvl = g.facilities.youth;
+  const room = ACADEMY_MAX - academyOf(g).length;
+  const n = Math.min(academyIntakeSize(lvl), room);
+  const names: string[] = [];
+  for (let i = 0; i < n; i++) {
+    const pos = SQUAD_SHAPE[ri(r, 0, SQUAD_SHAPE.length - 1)];
+    const np = makePlayer(r, g.players.length, pos, 30 + lvl * 4 + ri(r, 0, 4), 14, 16, ACADEMY, used);
+    np.pot = clamp(np.ovr + 16 + lvl * 3 + ri(r, 0, 8), np.ovr, 96);
+    np.value = calcValue(np.ovr, np.pot, np.age);
+    np.salary = calcSalary(np.value);
+    g.players.push(np);
+    names.push(np.name);
+  }
+  if (n > 0) pushNews(g, 'in', `Youth academy: new kids joined — ${names.join(', ')}.`);
+  if (n < academyIntakeSize(lvl)) pushNews(g, 'info', 'The youth academy is full — promote or release players to make room.');
+}
+
+/** First group of academy players, for a new game or a save made before the academy existed. */
+export function openAcademy(g: GameState) {
+  if (g.academyOpen) return;
+  g.academyOpen = true;
+  const used = new Set(g.players.map((p) => p.name));
+  academyIntake(g, mulberry(g.seed + 977 + g.season), used);
+}
+
+/** Academy players get a little better every week; a better academy teaches faster. */
+function trainAcademy(g: GameState) {
+  const chance = tv('academy.growthChance') + g.facilities.youth * 0.05;
+  for (const p of academyOf(g)) {
+    for (let k = 0; k < 3; k++) {
+      if (p.ovr >= p.pot || R() >= chance) continue;
+      const a = ATTRS[rnd(0, ATTRS.length - 1)];
+      p[a] = clamp(p[a] + 1, 12, 97);
+      p.ovr = calcOvr(p);
+    }
+    p.value = calcValue(p.ovr, p.pot, p.age);
+    p.salary = calcSalary(p.value);
+  }
+}
+
+export function promoteYouth(g: GameState, pid: number): string | null {
+  const p = P(g, pid);
+  if (!p || p.clubId !== ACADEMY) return 'This player is not in the academy.';
+  if (userSquad(g).length >= MAX_SQUAD) return `Your squad is full (max ${MAX_SQUAD}).`;
+  p.clubId = g.userClub;
+  p.contract = 2;
+  if (!g.cards.includes(p.id)) g.cards.push(p.id);
+  ensureNumbers(g);
+  pushNews(g, 'in', `Youth academy: ${p.name} (${p.pos}, pot ${p.pot}) joins the first team!`);
+  checkAchievements(g);
+  return null;
+}
+
+export function releaseYouth(g: GameState, pid: number): string | null {
+  const p = P(g, pid);
+  if (!p || p.clubId !== ACADEMY) return 'This player is not in the academy.';
+  p.clubId = -1;
+  pushNews(g, 'out', `${p.name} was released from the academy.`);
+  return null;
 }
 
 // ---------- facilities ----------
@@ -836,7 +1000,7 @@ function endSeason(g: GameState) {
       p.clubId = p.loan.from;
       delete p.loan;
     }
-    developPlayer(p, p.clubId === me ? Math.floor((g.facilities.training - 1) / 2) + youthBoost : 0);
+    developPlayer(p, p.clubId === me ? Math.floor((g.facilities.training - 1) / 2) + youthBoost : p.clubId === ACADEMY ? Math.floor((g.facilities.youth - 1) / 2) : 0);
   }
   // retirements
   const used = new Set(g.players.map((p) => p.name));
@@ -849,6 +1013,30 @@ function endSeason(g: GameState) {
     } else if (p.age >= 36 && p.clubId === me) {
       p.clubId = -1;
       pushNews(g, 'out', `${p.name} retired from ${club.name}. Thank you for everything!`);
+    }
+  }
+  // contracts: CPU clubs renew quietly; the user's expiring players leave, but never below the squad minimum
+  const expiringUser = g.players.filter((p) => p.clubId === me && !p.loan && p.contract === 1).sort((a, b) => a.ovr - b.ovr);
+  const leaving = new Set(expiringUser.slice(0, Math.max(0, userSquad(g).length - MIN_SQUAD)).map((p) => p.id));
+  for (const p of g.players) {
+    if (p.clubId < 0 || (p.loan && p.clubId === me)) continue; // loaned-in players keep their old deal
+    if (p.contract === undefined) continue;
+    p.contract--;
+    if (p.contract > 0) {
+      if (p.clubId === me && p.contract === 1) pushNews(g, 'info', `{a} enters the final season of their contract.`.replace('{a}', p.name));
+      continue;
+    }
+    if (p.clubId === me) {
+      if (leaving.has(p.id)) {
+        p.clubId = -1;
+        delete p.askPrice;
+        pushNews(g, 'out', `{a}'s contract ended and they left the club.`.replace('{a}', p.name));
+      } else {
+        p.contract = 1;
+        pushNews(g, 'info', `{a} signs a one-season contract extension.`);
+      }
+    } else {
+      p.contract = 1 + (p.id % 3); // CPU clubs renew quietly
     }
   }
   // CPU squads topped up
@@ -864,24 +1052,20 @@ function endSeason(g: GameState) {
       sq = squadOf(g, c.id);
     }
   }
-  // youth intake
-  const intake = 1 + (g.facilities.youth >= 3 ? 1 : 0) + (g.facilities.youth >= 5 ? 1 : 0);
-  for (let i = 0; i < intake; i++) {
-    const pos = SQUAD_SHAPE[ri(r, 0, SQUAD_SHAPE.length - 1)];
-    const np = makePlayer(r, g.players.length, pos, 34 + g.facilities.youth * 4 + ri(r, 0, 4), 15, 16, me, used);
-    np.pot = clamp(np.ovr + 14 + g.facilities.youth * 3 + ri(r, 0, 8), np.ovr, 96);
-    np.value = calcValue(np.ovr, np.pot, np.age);
-    np.salary = calcSalary(np.value);
-    g.players.push(np);
-    g.cards.push(np.id);
-    pushNews(g, 'in', `Youth academy: ${np.name} (${np.pos}, pot ${np.pot}) joins the first team!`);
+  // youth academy: the oldest leave, a new group arrives
+  for (const p of academyOf(g)) {
+    if (p.age <= ACADEMY_AGE) continue;
+    p.clubId = -1;
+    pushNews(g, 'out', `${p.name} was too old for the academy and left the club.`);
   }
+  academyIntake(g, r, used);
   g.balanceHistory.push(g.balance);
   g.seasonSummary = { season: g.season, div: oldDiv, pos, result, prize, lines };
   g.season++;
   g.offers = [];
   startSeason(g);
   fixLineup(g);
+  ensureNumbers(g);
   checkAchievements(g);
 }
 

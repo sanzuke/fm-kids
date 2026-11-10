@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { H, W, type Agent, type MatchEvent } from '../game/engine';
+import { shirtOf } from '../game/world';
 import { ANIMS, FRAME, animStart, buildBall, buildSheet, lookKey, type AnimName, type Look } from './sprites';
 import type { MatchController } from './controller';
 import { t } from '../i18n';
@@ -13,6 +14,8 @@ const SPRITE_SCALE = 0.78;
 interface Actor {
   spr: Phaser.GameObjects.Sprite;
   shadow: Phaser.GameObjects.Ellipse;
+  /** shirt number floating over the player; the sprite is too small to print it on the back */
+  num?: Phaser.GameObjects.Text;
   key: string;
   anim: string;
 }
@@ -200,6 +203,12 @@ export class MatchScene extends Phaser.Scene {
     const shadow = this.add.ellipse(0, 0, 30, 12, 0x000000, 0.28).setDepth(2);
     const spr = this.add.sprite(0, 0, key, 'idle0').setOrigin(0.5, 0.9).setScale(SPRITE_SCALE);
     const act: Actor = { spr, shadow, key, anim: '' };
+    const n = shirtOf(a.player);
+    if (n !== undefined) {
+      act.num = this.add
+        .text(0, 0, String(n), { fontFamily: 'Fredoka, Trebuchet MS, sans-serif', fontSize: '12px', fontStyle: 'bold', color: '#ffffff', stroke: '#1d2b53', strokeThickness: 3 })
+        .setOrigin(0.5, 1);
+    }
     this.actors.set(a.id, act);
     this.looks.set(a.id, look);
     return act;
@@ -228,6 +237,7 @@ export class MatchScene extends Phaser.Scene {
       act.spr.setPosition(x, y);
       act.shadow.setPosition(x, y + 2);
       act.spr.setDepth(100 + y);
+      act.num?.setPosition(x, y - 42).setDepth(100 + y + 1).setVisible(a.state !== 'dive');
       let name: AnimName = 'idle';
       let ts = 1;
       const sp = Math.hypot(a.vx, a.vy);
@@ -258,6 +268,7 @@ export class MatchScene extends Phaser.Scene {
       if (!seen.has(id)) {
         act.spr.destroy();
         act.shadow.destroy();
+        act.num?.destroy();
         this.actors.delete(id);
       }
     }

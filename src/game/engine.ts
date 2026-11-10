@@ -1,13 +1,15 @@
 // Pure match simulation: no rendering code in here.
 import type { FormationId, Mentality, Player, Pos, Style } from './types';
-import { FORMATIONS, fit } from './formations';
+import { tv } from './tuning';
+import { fit, slotsOf, type Slot } from './formations';
 
 export const W = 105;
 export const H = 68;
 export const GOAL_HALF = 3.66;
 export const GOAL_H = 2.44;
-export const MATCH_SECONDS = 180; // 90 match minutes
-export const HALF_SECONDS = MATCH_SECONDS / 2;
+/** Match length in real seconds for 90 minutes — tunable from the Tune panel. */
+export const MATCH_SECONDS = () => tv('match.duration');
+const HALF_SECONDS = () => MATCH_SECONDS() / 2;
 const G = 18;
 
 export type AState = 'idle' | 'walk' | 'run' | 'kick' | 'shoot' | 'tackle' | 'celebrate' | 'dive' | 'fallen';
@@ -19,6 +21,8 @@ export interface Setup {
   color2: string;
   gkColor: string;
   formation: FormationId;
+  /** Own layout of the positions; the formation's standard one when left out. */
+  slots?: Slot[];
   mentality: Mentality;
   style: Style;
   lineup: Player[]; // 11 by slot
@@ -196,7 +200,7 @@ export class MatchEngine {
     };
     for (const side of [0, 1] as const) {
       const s = this.setups[side];
-      const slots = FORMATIONS[s.formation];
+      const slots = slotsOf(s);
       for (let i = 0; i < 11; i++) this.agents.push(this.makeAgent(side, i, s.lineup[i], slots[i].pos, slots[i].u, slots[i].v));
     }
     this.kickoff(this.firstKick);
@@ -237,7 +241,7 @@ export class MatchEngine {
     return side === 0 ? y / H : 1 - y / H;
   }
   get minute() {
-    return Math.min(90, Math.floor((this.time / MATCH_SECONDS) * 90));
+    return Math.min(90, Math.floor((this.time / MATCH_SECONDS()) * 90));
   }
   active(side?: 0 | 1) {
     return side === undefined ? this.agents : this.agents.filter((a) => a.side === side);
@@ -309,7 +313,7 @@ export class MatchEngine {
     this.agents.splice(this.agents.indexOf(out), 1);
     this.leaving.push(out);
     this.retired.push(out);
-    const slots = FORMATIONS[setup.formation];
+    const slots = slotsOf(setup);
     const na = this.makeAgent(side, slot, inP, slots[slot].pos, out.hu, out.hv);
     na.x = W / 2 + (side === 0 ? -6 : 6);
     na.y = -1.5;
@@ -343,12 +347,12 @@ export class MatchEngine {
     // keepers and very short-handed teams are never sent off, so a match always stays playable
     const canGo = fouler.slotPos !== 'GK' && this.agents.filter((a) => a.side === fouler.side).length > 8;
     const roll = Math.random();
-    if (canGo && roll < 0.02) {
+    if (canGo && roll < 0.02 * tv('match.redCard')) {
       fouler.red = true;
       this.teamStats[fouler.side].reds++;
       this.emit('card', fouler.side, `🟥 ${this.minute}' Red card! ${name} is sent off`, fouler.player.id);
       this.removeAgent(fouler);
-    } else if (roll < 0.24) {
+    } else if (roll < 0.24 * tv('match.yellowCard')) {
       if (!fouler.yellow) {
         fouler.yellow = true;
         this.teamStats[fouler.side].yellows++;
@@ -361,7 +365,7 @@ export class MatchEngine {
         this.removeAgent(fouler);
       }
     }
-    if (victim.slotPos !== 'GK' && Math.random() < 0.05) this.injure(victim);
+    if (victim.slotPos !== 'GK' && Math.random() < 0.05 * tv('match.injuryRisk')) this.injure(victim);
   }
 
   /** A hurt player comes off: a substitute replaces them if one is available, otherwise the team plays a player short. */
@@ -409,12 +413,12 @@ export class MatchEngine {
     this.pickupAndTackle();
     this.cpuSubs();
 
-    if (this.half === 1 && this.time >= HALF_SECONDS) {
+    if (this.half === 1 && this.time >= HALF_SECONDS()) {
       this.phase = 'ht';
       this.emit('ht', -1, `⏸️ Half time ${this.score[0]} - ${this.score[1]}`);
-    } else if (this.time >= MATCH_SECONDS && !this.ball.shot) {
+    } else if (this.time >= MATCH_SECONDS() && !this.ball.shot) {
       this.phase = 'ft';
-      this.time = MATCH_SECONDS;
+      this.time = MATCH_SECONDS();
       this.emit('ft', -1, `🏁 Full time ${this.score[0]} - ${this.score[1]}`);
     }
   }
@@ -510,7 +514,7 @@ export class MatchEngine {
     // energy drain
     const sp = Math.hypot(a.vx, a.vy);
     a.energy = Math.max(0.15, a.energy - 0.0053 * (sp / 7) * (1.25 - (a.player.stamina / 100) * 0.75) * dt * 1.8);
-    const maxSp = a.maxSp * (0.72 + 0.28 * a.energy) * (owner === a ? 0.9 : 1);
+    const maxSp = a.maxSp * tv('match.playerSpeed') * (0.72 + 0.28 * a.energy) * (owner === a ? 0.9 : 1);
 
     if (goalPhase) {
       this.driveCelebration(a, dt);
@@ -713,7 +717,7 @@ export class MatchEngine {
       return;
     }
     let shootP = 0;
-    if (d < 42) shootP = 0.16 + ((42 - d) / 42) * 0.6 + (setup.mentality - 1) * 0.08 + (a.eff.shooting - 60) / 300;
+    if (d < 42) shootP = (0.16 + ((42 - d) / 42) * 0.6 + (setup.mentality - 1) * 0.08 + (a.eff.shooting - 60) / 300) * tv('match.shootChance');
     if (pressure < 2) shootP += 0.05;
     if (!forced && Math.random() < shootP) {
       this.shoot(a, pressure);
@@ -835,7 +839,7 @@ export class MatchEngine {
     let outcome: ShotInfo['outcome'] = 'miss';
     if (onTarget) {
       const cornerBonus = (Math.abs(ty - H / 2) / GOAL_HALF) * 0.12 + (tz > 1.6 || tz < 0.4 ? 0.05 : 0);
-      const pSave = clamp(0.56 + (gk.eff.defending - a.eff.shooting) / 230 + (d > 20 ? 0.12 : 0) - cornerBonus, 0.12, 0.8);
+      const pSave = clamp(tv('match.keeperSkill') + (gk.eff.defending - a.eff.shooting) / 230 + (d > 20 ? 0.12 : 0) - cornerBonus, 0.12, 0.8);
       outcome = Math.random() < pSave ? 'save' : 'goal';
     }
     const speed = clamp(20 + a.eff.shooting * 0.14, 22, 34);

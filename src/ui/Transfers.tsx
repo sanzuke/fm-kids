@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useG, useStore } from '../store';
-import { AttrBars, Avatar, Btn, Coins, LineChart, Modal, Nationality, OvrBadge, PageTitle, PlayerCard, PosBadge, Rich, Tabs } from './kit';
+import { AttrBars, Avatar, Btn, Coins, LineChart, Modal, Nationality, OvrBadge, PageTitle, PlayerCard, PosBadge, PosBadges, Rich, Tabs } from './kit';
 import { NATIONS, nationOf } from '../game/nations';
 import { POSITIONS, type Player, type Pos } from '../game/types';
 import {
@@ -75,7 +75,7 @@ function Market({ onOpen }: { onOpen: (id: number) => void }) {
             {list.slice(0, 60).map((p) => (
               <tr key={p.id} className="click" onClick={() => onOpen(p.id)}>
                 <td><div className="row" style={{ flexWrap: 'nowrap' }}><Avatar p={p} color={clubOf(g, p.clubId)?.color ?? '#9aa7c7'} size={36} /><b>{p.name}</b></div></td>
-                <td><Nationality p={p} /></td><td><PosBadge pos={p.pos} /></td><td>{p.age}</td><td><OvrBadge v={p.ovr} /></td><td>{p.pot}</td>
+                <td><Nationality p={p} /></td><td><PosBadges p={p} /></td><td>{p.age}</td><td><OvrBadge v={p.ovr} /></td><td>{p.pot}</td>
                 <td>{clubOf(g, p.clubId)?.name ?? <span className="tag green">{t('Free agent')}</span>}</td>
                 <td>{p.clubId === -1 ? <span className="tag green">{t('FREE')}</span> : <Coins n={askPrice(p)} />}</td>
               </tr>
@@ -101,7 +101,7 @@ function Detail({ pid, onClose }: { pid: number; onClose: () => void }) {
       <div className="grid g2">
         <div style={{ display: 'flex', justifyContent: 'center' }}><PlayerCard p={p} color={club?.color} big /></div>
         <div>
-          <div className="row"><PosBadge pos={p.pos} /><span className="chip"><Nationality p={p} withName /></span><span className="chip">{t('Age {n}', { n: p.age })}</span><span className="chip">{club ? club.name : t('Free agent')}</span></div>
+          <div className="row"><PosBadges p={p} /><span className="chip"><Nationality p={p} withName /></span><span className="chip">{t('Age {n}', { n: p.age })}</span><span className="chip">{club ? club.name : t('Free agent')}</span></div>
           <div className="row" style={{ margin: '8px 0' }}><b>OVR</b><OvrBadge v={p.ovr} /><b>POT</b><OvrBadge v={p.pot} /></div>
           <AttrBars p={p} />
           <div className="row" style={{ marginTop: 8 }}>
@@ -260,7 +260,7 @@ function Sell() {
         {sq.map((p) => (
           <div key={p.id} className="prow" style={{ cursor: 'default' }}>
             <Avatar p={p} color={userClub(g).color} size={36} />
-            <div className="grow" onClick={() => go('player', { id: p.id })} style={{ cursor: 'pointer' }}><div className="nm">{p.name} <PosBadge pos={p.pos} /></div><ValueFacts p={p} /><div className="sub">{t('Value {n}', { n: p.value })}{p.askPrice ? ` · ${t('asking {n}', { n: p.askPrice })}` : ''}</div></div>
+            <div className="grow" onClick={() => go('player', { id: p.id })} style={{ cursor: 'pointer' }}><div className="nm">{p.name} <PosBadges p={p} /></div><ValueFacts p={p} /><div className="sub">{t('Value {n}', { n: p.value })}{p.askPrice ? ` · ${t('asking {n}', { n: p.askPrice })}` : ''}</div></div>
             {p.askPrice ? <Btn small kind="ghost" onClick={() => commit((x) => listForSale(x, p.id, null))}>{t('Unlist')}</Btn> : <Btn small kind="blue" onClick={() => { commit((x) => listForSale(x, p.id, Math.round((p.value * 1.1) / 10) * 10)); say(`${p.name} listed for ${Math.round((p.value * 1.1) / 10) * 10}`); }}>{t('List')}</Btn>}
             <Btn small kind="red" onClick={() => { const q = Math.round(p.value * 0.7); let e: string | null = null; commit((x) => { e = sellNow(x, p.id, q); }); if (e) say(e); else { sfx.coin(); say(`Sold ${p.name} for ${q}`); } }}>{t('Sell')}</Btn>
           </div>

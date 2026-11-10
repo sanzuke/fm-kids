@@ -6,7 +6,7 @@ import { SKINS, HAIRS } from '../match/sprites';
 import { sfx } from '../audio';
 import { LANGS, t } from '../i18n';
 import { nationOf, type Nation } from '../game/nations';
-import { YELLOW_LIMIT } from '../game/world';
+import { YELLOW_LIMIT, shirtOf } from '../game/world';
 import { useStore } from '../store';
 
 export function Btn(props: { children: ReactNode; onClick?: () => void; kind?: 'primary' | 'green' | 'red' | 'ghost' | 'blue'; disabled?: boolean; small?: boolean; title?: string; className?: string }) {
@@ -36,12 +36,13 @@ export function Logo({ icon, color, color2, size = 48 }: { icon: number; color: 
   );
 }
 
-export function Jersey({ color, color2, size = 70, away }: { color: string; color2: string; size?: number; away?: boolean }) {
+export function Jersey({ color, color2, size = 70, away, num }: { color: string; color2: string; size?: number; away?: boolean; num?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" aria-label={away ? t('away jersey') : t('home jersey')}>
       <path d="M20 6 L8 14 L2 28 L12 33 L16 26 V58 H48 V26 L52 33 L62 28 L56 14 L44 6 C41 11 36 13 32 13 C28 13 23 11 20 6Z" fill={color} stroke="#1d2b53" strokeWidth="2.5" strokeLinejoin="round" />
       <rect x="16" y="34" width="32" height="7" fill={color2} opacity="0.9" />
       <path d="M20 6 C23 11 28 13 32 13 C36 13 41 11 44 6" fill="none" stroke={color2} strokeWidth="3" />
+      {num !== undefined && <text x="32" y="45" textAnchor="middle" fontSize="24" fontWeight="700" fill="#fff" stroke="#1d2b53" strokeWidth="4" paintOrder="stroke" strokeLinejoin="round">{num}</text>}
     </svg>
   );
 }
@@ -72,7 +73,17 @@ export function Avatar({ p, color = '#4cc9f0', size = 56 }: { p: Pick<Player, 's
   );
 }
 
+/** A player's shirt number; nothing for players without a club. */
+export function ShirtNo({ p }: { p: Pick<Player, 'num' | 'numClub' | 'clubId'> }) {
+  const n = shirtOf(p);
+  return n === undefined ? null : <span className="shirt-no" title={t('Shirt number')}>{n}</span>;
+}
+
 export const PosBadge = ({ pos }: { pos: string }) => <span className={`pos pos-${pos}`}>{pos}</span>;
+/** Main position first, then every extra position the player has learned. */
+export const PosBadges = ({ p }: { p: Pick<Player, 'pos' | 'extraPos'> }) => (
+  <span className="pos-list"><PosBadge pos={p.pos} />{(p.extraPos ?? []).map((x) => <PosBadge key={x} pos={x} />)}</span>
+);
 
 export function OvrBadge({ v }: { v: number }) {
   return <span className={`ovr r-${rarity(v)}`}>{v}</span>;
@@ -106,7 +117,7 @@ export function PlayerCard({ p, color, onClick, mini, big }: { p: Player; color?
   return (
     <div className={`pcard r-${rarity(p.ovr)} ${mini ? 'mini' : ''} ${big ? 'big' : ''}`} onClick={onClick} role={onClick ? 'button' : undefined}>
       <div className="pcard-top">
-        <div className="pcard-ovr">{p.ovr}<small>{p.pos}</small></div>
+        <div className="pcard-ovr">{p.ovr}<small>{p.pos}</small>{shirtOf(p) !== undefined && <small className="pcard-num">#{shirtOf(p)}</small>}</div>
         <Avatar p={p} color={color} size={mini ? 44 : big ? 132 : 64} />
       </div>
       <div className="pcard-name">{p.name}</div>
@@ -161,12 +172,11 @@ export function PageTitle({ icon, title, sub, right }: { icon: string; title: st
   return (
     <div className="page-title">
       <div className="pt-icon">{icon}</div>
-      <div>
+      <div className="pt-text">
         <h1>{title}</h1>
         {sub && <p>{sub}</p>}
       </div>
-      <div className="grow" />
-      {right}
+      {right && <div className="pt-right">{right}</div>}
     </div>
   );
 }
