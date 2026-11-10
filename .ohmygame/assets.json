@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "prompts": {
+    "assets/generated/image-e417189c-0e09-4f1c-aba2-bc74122830db.png": "Cheerful 2D cartoon football stadium at sunset, slightly isometric green striped pitch, cute big-headed kid footballers in red and blue jerseys cheering, holding a golden trophy, confetti, bright colorful flat kid-friendly illustration, no text, no logos"
+  },
+  "previews": {},
+  "libraryAssets": {
+    "assets/generated/image-e417189c-0e09-4f1c-aba2-bc74122830db.png": "62048a96-fba7-4389-aa7e-b063ce4decba",
+    "assets/imported/image.png": "5f673959-f9c2-4c35-aed5-71ad2637a811"
+  },
+  "origins": {
+    "assets/generated/image-e417189c-0e09-4f1c-aba2-bc74122830db.png": "generated",
+    "assets/imported/image.png": "uploaded"
+  },
+  "purposes": {
+    "assets/generated/image-e417189c-0e09-4f1c-aba2-bc74122830db.png": "asset",
+    "assets/imported/image.png": "reference"
+  }
+}

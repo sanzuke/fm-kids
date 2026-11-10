@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "nodes": [
+    {
+      "id": "doc-main",
+      "type": "document",
+      "data": {
+        "documentId": "main-design"
+      },
+      "title": "Main Design",
+      "description": "Game design and asset list"
+    }
+  ],
+  "edges": [],
+  "id": "853f30b9-092a-4c79-8029-608debc78f5e"
+}

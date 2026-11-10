@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "boards": [
+    {
+      "id": "853f30b9-092a-4c79-8029-608debc78f5e",
+      "name": "Untitled"
+    }
+  ],
+  "documents": [
+    {
+      "id": "main-design",
+      "title": "Kids Football Manager \u2014 Main Design"
+    }
+  ],
+  "mainDocumentId": "main-design"
+}
