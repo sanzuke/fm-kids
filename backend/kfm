@@ -1,0 +1,5 @@
+#!/bin/sh
+# Runs a command in the PHP container, e.g. ./kfm php artisan test   or   ./kfm composer install
+cd "$(dirname "$0")" || exit 1
+export KFM_UID="$(id -u)" KFM_GID="$(id -g)"
+exec docker compose run --rm --no-TTY app "$@"

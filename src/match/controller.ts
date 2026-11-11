@@ -23,7 +23,7 @@ export class MatchController {
       else if (e.type === 'save') { sfx.save(); crowdCheer(0.45); }
       else if (e.type === 'ht' || e.type === 'ft' || e.type === 'kickoff' || e.type === 'foul' || e.type === 'offside') sfx.whistle();
       else if (e.type === 'card' || e.type === 'injury') sfx.whistle();
-      else if (e.type === 'sub') sfx.click();
+      else if (e.type === 'sub' || e.type === 'talk') sfx.click();
       this.eventListeners.forEach((f) => f(e));
     };
   }

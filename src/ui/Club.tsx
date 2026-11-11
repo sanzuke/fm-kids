@@ -32,8 +32,8 @@ export function ClubPage() {
           <div className="row" style={{ flexWrap: 'nowrap' }}>
             <Logo icon={club.icon} color={club.color} color2={club.color2} size={64} />
             <div className="grow">
-              <b>{tx(divName(club.div))}</b>
-              <div className="hint">{t('Position {pos} of {n}', { pos: tablePos(g, club.id), n: g.tables[club.div]?.length ?? 0 })}</div>
+              <b>{club.foreign ? t('🌍 Club from abroad') : tx(divName(club.div))}</b>
+              {!club.foreign && <div className="hint">{t('Position {pos} of {n}', { pos: tablePos(g, club.id), n: g.tables[club.div]?.length ?? 0 })}</div>}
               <Stars rep={club.rep} />
             </div>
           </div>

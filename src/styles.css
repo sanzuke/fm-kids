@@ -103,7 +103,7 @@ table.t tr.click { cursor: pointer; } table.t tr.click:hover td { background: #e
 .tile { text-align: center; }
 .tile .big-num { display: block; }
 .tile small { color: var(--muted); font-weight: 600; }
-input[type=text], input[type=number], select { font-family: inherit; font-size: 16px; padding: 9px 12px; border: 3px solid var(--navy); border-radius: 12px; background: #fff; color: var(--navy); max-width: 100%; }
+input[type=text], input[type=number], input[type=email], input[type=password], input[type=url], select { font-family: inherit; font-size: 16px; padding: 9px 12px; border: 3px solid var(--navy); border-radius: 12px; background: #fff; color: var(--navy); max-width: 100%; }
 input[type=range] { accent-color: var(--purple); width: 100%; }
 label.f { display: flex; flex-direction: column; gap: 4px; font-weight: 600; font-size: 14px; }
 .modal-back { position: fixed; inset: 0; background: rgba(29,43,83,.55); display: grid; place-items: center; z-index: 100; padding: 12px; }

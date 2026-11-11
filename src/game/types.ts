@@ -21,11 +21,13 @@ export const ATTR_ICON: Record<Attr, string> = {
 export type FormationId = '4-4-2' | '4-3-3' | '4-2-3-1' | '3-5-2' | '3-4-3';
 export type Mentality = 0 | 1 | 2; // defend, balanced, attack
 export type Style = 'short' | 'long' | 'counter';
-export type Comp = 'league' | 'cup' | 'tournament' | 'friendly';
+export type Comp = 'league' | 'cup' | 'tournament' | 'friendly' | 'continental';
 
 export interface Player {
   id: number;
   name: string;
+  /** catalogue id on the server: the same master identity is reused in every save (absent for players invented locally) */
+  catalogId?: number;
   age: number;
   pos: Pos;
   ovr: number;
@@ -63,6 +65,9 @@ export interface Player {
   num?: number;
   numClub?: number;
   ovrHistory: number[];
+  nat?: string;
+  /** nationality name when the game has no flag for it (online players only) */
+  natName?: string;
   loan?: { from: number; untilStep: number; share: number; season: number };
   askPrice?: number;
   seasonGoals: number;
@@ -84,6 +89,29 @@ export interface Club {
   stadium: number;
   formation: FormationId;
   isUser: boolean;
+  /** 0 solid, 1 vertical stripes, 2 hoops, 3 halves (user club only; bought in the kit shop) */
+  kitPattern?: number;
+  /** guest club from abroad: never plays in the league tables */
+  foreign?: boolean;
+  /** real-world club (Liverpool, Chelsea…) added because one of its players entered the world; trades but never competes */
+  imported?: boolean;
+}
+
+/** One chairman challenge for the current week. */
+export interface Challenge {
+  kind: 'win' | 'win2' | 'clean' | 'three' | 'young' | 'derby';
+  text: string;
+  reward: number;
+  done: boolean;
+}
+
+/** The inter-continental Champions Cup state; qualified by winning the top flight. */
+export interface Continental {
+  qualified: boolean;
+  failed: boolean;
+  round: number;
+  oppId: number;
+  foreignIds: number[];
 }
 
 export interface Scorer {
@@ -195,6 +223,14 @@ export interface GameState {
   cards: number[];
   friendlies: Fixture[];
   settings: Settings;
+  /** the eternal neighbour club; derby matches against them feel bigger */
+  rival?: number;
+  /** this week's chairman challenge (absent on older saves) */
+  challenge?: Challenge | null;
+  /** Champions Cup progress (absent on older saves) */
+  continental?: Continental | null;
+  /** kit patterns owned in the kit shop */
+  kitOwned?: number[];
   wins: number;
   draws: number;
   losses: number;
@@ -203,6 +239,12 @@ export interface GameState {
   seasonSummary: SeasonSummary | null;
   /** set once the youth academy has its first group of players (absent on older saves) */
   academyOpen?: boolean;
+  /** catalogue ids of the players signed from the server, so none is signed twice (absent on older saves) */
+  serverSignings?: number[];
+  /** catalogue ids already brought into this world (absent on older saves) */
+  serverImported?: number[];
+  /** the season whose real-player catalogue this world carries (absent until the first sync) */
+  catalogue?: { season: number; syncedAt: number; players: number };
 }
 
 export interface SeasonSummary {

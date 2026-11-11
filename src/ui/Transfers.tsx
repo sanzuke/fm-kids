@@ -9,6 +9,7 @@ import {
 } from '../game/world';
 import { sfx } from '../audio';
 import { t, tx } from '../i18n';
+import { CatalogueStatus } from './CatalogueSync';
 
 type Tab = 'market' | 'sell' | 'loans' | 'news';
 
@@ -40,6 +41,7 @@ function Market({ onOpen }: { onOpen: (id: number) => void }) {
   const [price, setPrice] = useState(5000);
   const [q, setQ] = useState('');
   const [free, setFree] = useState(false);
+  const [real, setReal] = useState(false);
   const [nat, setNat] = useState('ALL');
   const [sort, setSort] = useState<'ovr' | 'pot' | 'price' | 'age'>('ovr');
   const list = useMemo(() => {
@@ -47,17 +49,19 @@ function Market({ onOpen }: { onOpen: (id: number) => void }) {
     if (pos !== 'ALL') l = l.filter((p) => p.pos === pos);
     l = l.filter((p) => p.age >= age[0] && p.age <= age[1] && p.ovr >= ovr && p.pot >= pot && (p.clubId === -1 ? 0 : askPrice(p)) <= price);
     if (free) l = l.filter((p) => p.clubId === -1);
+    if (real) l = l.filter((p) => p.catalogId !== undefined);
     if (nat !== 'ALL') l = l.filter((p) => nationOf(p).code === nat);
     if (q.trim()) l = l.filter((p) => p.name.toLowerCase().includes(q.trim().toLowerCase()));
     l.sort((a, b) => (sort === 'ovr' ? b.ovr - a.ovr : sort === 'pot' ? b.pot - a.pot : sort === 'age' ? a.age - b.age : askPrice(a) - askPrice(b)));
     return l;
-  }, [g, pos, age, ovr, pot, price, q, free, sort, nat]);
+  }, [g, pos, age, ovr, pot, price, q, free, real, sort, nat]);
   return (
     <div>
+      <CatalogueStatus />
       <div className="card" style={{ marginBottom: 12 }}>
         <div className="grid g3" style={{ gap: 10 }}>
           <label className="f">{t('Position')}<select value={pos} onChange={(e) => setPos(e.target.value as Pos | 'ALL')}><option value="ALL">{t('All positions')}</option>{POSITIONS.map((p) => <option key={p}>{p}</option>)}</select></label>
-          <label className="f">{t('Nationality')}<select value={nat} onChange={(e) => setNat(e.target.value)}><option value="ALL">{t('All countries')}</option>{NATIONS.map((n) => <option key={n.code} value={n.code}>{t(n.name)}</option>)}</select></label>
+          <label className="f">{t('Nationality')}<select value={nat} onChange={(e) => setNat(e.target.value)}><option value="ALL">{t('All countries')}</option>{[...NATIONS].sort((a, b) => t(a.name).localeCompare(t(b.name))).map((n) => <option key={n.code} value={n.code}>{t(n.name)}</option>)}</select></label>
           <label className="f">{t('Search name')}<input type="text" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('e.g. Rafa')} /></label>
           <label className="f">{t('Sort by')}<select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}><option value="ovr">{t('Overall')}</option><option value="pot">{t('Potential')}</option><option value="price">{t('Price (low first)')}</option><option value="age">{t('Age (young first)')}</option></select></label>
           <label className="f">{t('Age')} {age[0]}–{age[1]}<input type="range" min={15} max={38} value={age[1]} onChange={(e) => setAge([age[0], +e.target.value])} /><input type="range" min={15} max={38} value={age[0]} onChange={(e) => setAge([Math.min(+e.target.value, age[1]), age[1]])} /></label>
@@ -65,6 +69,7 @@ function Market({ onOpen }: { onOpen: (id: number) => void }) {
           <label className="f">{t('Min potential: {n}', { n: pot })}<input type="range" min={0} max={95} value={pot} onChange={(e) => setPot(+e.target.value)} /></label>
           <label className="f">{t('Max price: {n}', { n: price >= 5000 ? t('any') : price })}<input type="range" min={0} max={5000} step={50} value={price} onChange={(e) => setPrice(+e.target.value)} /></label>
           <label className="f" style={{ flexDirection: 'row', alignItems: 'center' }}><input type="checkbox" checked={free} onChange={(e) => setFree(e.target.checked)} /> {t('Free agents only')}</label>
+          <label className="f" style={{ flexDirection: 'row', alignItems: 'center' }}><input type="checkbox" checked={real} onChange={(e) => setReal(e.target.checked)} /> {t('Real players only')}</label>
         </div>
       </div>
       <p className="hint" style={{ margin: '0 0 6px' }}>{t('{n} players found', { n: list.length })}{list.length > 60 ? ` ${t('(showing 60)')}` : ''}</p>
@@ -74,7 +79,7 @@ function Market({ onOpen }: { onOpen: (id: number) => void }) {
           <tbody>
             {list.slice(0, 60).map((p) => (
               <tr key={p.id} className="click" onClick={() => onOpen(p.id)}>
-                <td><div className="row" style={{ flexWrap: 'nowrap' }}><Avatar p={p} color={clubOf(g, p.clubId)?.color ?? '#9aa7c7'} size={36} /><b>{p.name}</b></div></td>
+                <td><div className="row" style={{ flexWrap: 'nowrap' }}><Avatar p={p} color={clubOf(g, p.clubId)?.color ?? '#9aa7c7'} size={36} /><b>{p.name}</b>{p.catalogId !== undefined && <span className="tag yellow">{t('Real')}</span>}</div></td>
                 <td><Nationality p={p} /></td><td><PosBadges p={p} /></td><td>{p.age}</td><td><OvrBadge v={p.ovr} /></td><td>{p.pot}</td>
                 <td>{clubOf(g, p.clubId)?.name ?? <span className="tag green">{t('Free agent')}</span>}</td>
                 <td>{p.clubId === -1 ? <span className="tag green">{t('FREE')}</span> : <Coins n={askPrice(p)} />}</td>

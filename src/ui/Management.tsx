@@ -1,9 +1,11 @@
 import { useG, useStore } from '../store';
 import { Bar, Btn, Coins, LangPicker, LineChart, PageTitle, PlayerCard, Stars, Logo } from './kit';
-import { ACHIEVEMENTS, facilityCost, upgradeFacility, userClub, userSquad } from '../game/world';
+import { KIT_PATTERNS, ACHIEVEMENTS, buyKit, facilityCost, kitPrice, upgradeFacility, userClub, userSquad, wearKit } from '../game/world';
 import { rarity } from '../game/data';
 import { configureAudio, sfx, wantMusic } from '../audio';
+import { Jersey } from './kit';
 import { t, tx } from '../i18n';
+import { CloudSaves, ServerConnect } from './Online';
 
 const FAC: { k: 'training' | 'stadium' | 'youth'; icon: string; name: string; desc: string }[] = [
   { k: 'training', icon: '🏋️', name: 'Training ground', desc: 'Players improve faster every week.' },
@@ -58,6 +60,33 @@ export function Finance() {
   );
 }
 
+/** Buy and wear kit patterns with coins. */
+function KitShop() {
+  const g = useG();
+  const { commit, say } = useStore();
+  const owned = g.kitOwned ?? [0];
+  const wearing = userClub(g).kitPattern ?? 0;
+  return (
+    <div className="card">
+      <h2>{t('👕 Kit Shop')}</h2>
+      <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8 }}>
+        {KIT_PATTERNS.map((name, i) => (
+          <div key={i} className="card" style={{ padding: 8, textAlign: 'center' }}>
+            <Jersey color={userClub(g).color} color2={userClub(g).color2} size={64} pattern={i} />
+            <div style={{ fontSize: 13, fontWeight: 700 }}>{t(name)}</div>
+            {owned.includes(i) ? (
+              <Btn small kind={wearing === i ? 'green' : 'ghost'} disabled={wearing === i} onClick={() => { let e: string | null = null; commit((x) => { e = wearKit(x, i); }); if (e) say(e); else say(t('Wearing the {n} kit!', { n: t(name) })); }}>{wearing === i ? t('Wearing') : t('Wear')}</Btn>
+            ) : (
+              <Btn small disabled={g.balance < kitPrice(i)} onClick={() => { let e: string | null = null; commit((x) => { e = buyKit(x, i); }); if (e) { say(e); sfx.bad(); } else { say(t('{n} kit bought!', { n: t(name) })); sfx.good(); } }}>{t('🪙 {n}', { n: kitPrice(i) })}</Btn>
+            )}
+          </div>
+        ))}
+      </div>
+      <p className="hint" style={{ marginTop: 8 }}>{t('Kits you buy are worn in matches and on every card and jersey.')}</p>
+    </div>
+  );
+}
+
 export function Trophies() {
   const g = useG();
   const club = userClub(g);
@@ -69,6 +98,7 @@ export function Trophies() {
     <div className="wrap fade">
       <PageTitle icon="🥇" title={t('Trophy Room')} sub={t('{n} trophies · {done}/{all} achievements', { n: g.trophies.length, done, all: ACHIEVEMENTS.length })} right={<Logo icon={club.icon} color={club.color} color2={club.color2} size={52} />} />
       <div className="grid g2">
+        <KitShop />
         <div className="card">
           <h2>{t('🏆 Trophies')}</h2>
           {g.trophies.length === 0 && <p className="muted">{t('The cabinet is empty… for now! Win the league, cup or tournament.')}</p>}
@@ -134,7 +164,13 @@ export function Settings() {
         <div className="card">
           <h2>{t('Manager')}</h2>
           <label className="f">{t('Your name')}<input type="text" maxLength={16} value={g.manager} onChange={(e) => commit((x) => { x.manager = e.target.value; })} /></label>
-          <p className="hint" style={{ marginTop: 8 }}>{t('Kids Football Manager · all players are fictional.')}</p>
+          <p className="hint" style={{ marginTop: 8 }}>{t('Kids Football Manager · invented and real players side by side.')}</p>
+        </div>
+        <div style={{ gridColumn: '1 / -1' }}>
+          <ServerConnect />
+        </div>
+        <div style={{ gridColumn: '1 / -1' }}>
+          <CloudSaves />
         </div>
       </div>
     </div>

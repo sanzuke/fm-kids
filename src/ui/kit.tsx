@@ -5,7 +5,7 @@ import { ICONS, rarity } from '../game/data';
 import { SKINS, HAIRS } from '../match/sprites';
 import { sfx } from '../audio';
 import { LANGS, t } from '../i18n';
-import { nationOf, type Nation } from '../game/nations';
+import { nationByCode, nationOf, type FlagMark, type Nation } from '../game/nations';
 import { YELLOW_LIMIT, shirtOf } from '../game/world';
 import { useStore } from '../store';
 
@@ -36,10 +36,18 @@ export function Logo({ icon, color, color2, size = 48 }: { icon: number; color: 
   );
 }
 
-export function Jersey({ color, color2, size = 70, away, num }: { color: string; color2: string; size?: number; away?: boolean; num?: number }) {
+export function Jersey({ color, color2, size = 70, away, num, pattern = 0 }: { color: string; color2: string; size?: number; away?: boolean; num?: number; pattern?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" aria-label={away ? t('away jersey') : t('home jersey')}>
       <path d="M20 6 L8 14 L2 28 L12 33 L16 26 V58 H48 V26 L52 33 L62 28 L56 14 L44 6 C41 11 36 13 32 13 C28 13 23 11 20 6Z" fill={color} stroke="#1d2b53" strokeWidth="2.5" strokeLinejoin="round" />
+      {pattern > 0 && (
+        <g clipPath="url(#kcp)" opacity="0.85">
+          <clipPath id="kcp"><path d="M20 6 L8 14 L2 28 L12 33 L16 26 V58 H48 V26 L52 33 L62 28 L56 14 L44 6 C41 11 36 13 32 13 C28 13 23 11 20 6Z" /></clipPath>
+          {pattern === 1 && <><rect x="4" y="0" width="9" height="64" fill={color2} /><rect x="24" y="0" width="9" height="64" fill={color2} /><rect x="44" y="0" width="9" height="64" fill={color2} /></>}
+          {pattern === 2 && <><rect x="0" y="14" width="64" height="8" fill={color2} /><rect x="0" y="30" width="64" height="8" fill={color2} /><rect x="0" y="46" width="64" height="8" fill={color2} /></>}
+          {pattern === 3 && <rect x="0" y="0" width="32" height="64" fill={color2} />}
+        </g>
+      )}
       <rect x="16" y="34" width="32" height="7" fill={color2} opacity="0.9" />
       <path d="M20 6 C23 11 28 13 32 13 C36 13 41 11 44 6" fill="none" stroke={color2} strokeWidth="3" />
       {num !== undefined && <text x="32" y="45" textAnchor="middle" fontSize="24" fontWeight="700" fill="#fff" stroke="#1d2b53" strokeWidth="4" paintOrder="stroke" strokeLinejoin="round">{num}</text>}
@@ -212,31 +220,55 @@ export function LangPicker() {
   );
 }
 
+const STAR = Array.from({ length: 10 }, (_, i) => {
+  const r = i % 2 ? 2.3 : 5.6;
+  const a = (Math.PI / 5) * i - Math.PI / 2;
+  return `${(15 + r * Math.cos(a)).toFixed(2)},${(10 + r * Math.sin(a)).toFixed(2)}`;
+}).join(' ');
+
+/** One shape of a drawn flag, on the 30×20 flag canvas. `under` is the colour behind it. */
+function FlagShape({ mark, c, under }: { mark: FlagMark; c?: string; under: string }) {
+  switch (mark) {
+    case 'disc': return <circle cx="15" cy="10" r="6" fill={c} />;
+    case 'dot': return <circle cx="15" cy="10" r="4.2" fill={c} />;
+    case 'sun': return <circle cx="15" cy="10" r="2.6" fill={c} />;
+    case 'halfdisc': return <path d="M9 10 A6 6 0 0 0 21 10 Z" fill={c} />;
+    case 'cross': return <><rect x="12.5" y="0" width="5" height="20" fill={c} /><rect x="0" y="7.5" width="30" height="5" fill={c} /></>;
+    case 'plus': return <><rect x="13" y="4" width="4" height="12" fill={c} /><rect x="9" y="8" width="12" height="4" fill={c} /></>;
+    case 'nordic': return <><rect x="8" y="0" width="4" height="20" fill={c} /><rect x="0" y="8" width="30" height="4" fill={c} /></>;
+    case 'nordicThin': return <><rect x="9" y="0" width="2" height="20" fill={c} /><rect x="0" y="9" width="30" height="2" fill={c} /></>;
+    case 'saltire': return <path d="M0 0 L30 20 M30 0 L0 20" stroke={c} strokeWidth="3.4" fill="none" />;
+    case 'diamond': return <path d="M15 2.5 L27 10 L15 17.5 L3 10 Z" fill={c} />;
+    case 'star': return <polygon points={STAR} fill={c} />;
+    case 'canton': return <rect x="0" y="0" width="13" height="10" fill={c} />;
+    case 'triangle': return <path d="M0 0 L13 10 L0 20 Z" fill={c} />;
+    case 'crescent': return <><circle cx="13" cy="10" r="5.2" fill={c} /><circle cx="14.6" cy="10" r="4.2" fill={under} /><circle cx="19.5" cy="10" r="1.6" fill={c} /></>;
+  }
+}
+
 /** Small drawn flag (emoji flags do not show on every device). */
 export function Flag({ nation, size = 18 }: { nation: Nation; size?: number }) {
   const w = 30;
   const h = 20;
   const n = nation.bands.length;
-  const c = nation.markColor;
   return (
     <svg className="flag" width={size * 1.5} height={size} viewBox={`0 0 ${w} ${h}`} role="img" aria-label={t(nation.name)}>
       <title>{t(nation.name)}</title>
       {nation.bands.map((color, i) => (nation.dir === 'h'
         ? <rect key={i} x="0" y={(h / n) * i} width={w} height={h / n + 0.5} fill={color} />
         : <rect key={i} x={(w / n) * i} y="0" width={w / n + 0.5} height={h} fill={color} />))}
-      {nation.mark === 'disc' && <circle cx="15" cy="10" r="6" fill={c} />}
-      {nation.mark === 'sun' && <circle cx="15" cy="10" r="2.6" fill={c} />}
-      {nation.mark === 'cross' && <><rect x="12.5" y="0" width="5" height={h} fill={c} /><rect x="0" y="7.5" width={w} height="5" fill={c} /></>}
-      {nation.mark === 'nordic' && <><rect x="8" y="0" width="4" height={h} fill={c} /><rect x="0" y="8" width={w} height="4" fill={c} /></>}
-      {nation.mark === 'diamond' && <><path d="M15 2.5 L27 10 L15 17.5 L3 10 Z" fill={c} /><circle cx="15" cy="10" r="4.2" fill="#002776" /></>}
+      {nation.mark && <FlagShape mark={nation.mark} c={nation.markColor} under={nation.bands[0]} />}
+      {nation.mark2 && <FlagShape mark={nation.mark2} c={nation.mark2Color} under={nation.markColor ?? nation.bands[0]} />}
       <rect x="0.5" y="0.5" width={w - 1} height={h - 1} rx="2" fill="none" stroke="#1d2b53" strokeWidth="1" />
     </svg>
   );
 }
 
 /** A player's flag, optionally with the country name. */
-export function Nationality({ p, withName, size }: { p: Pick<Player, 'name'>; withName?: boolean; size?: number }) {
+export function Nationality({ p, withName, size }: { p: Pick<Player, 'name'> & { nat?: string; natName?: string }; withName?: boolean; size?: number }) {
   const nation = nationOf(p);
+  // a real player from a country the game has no flag for shows the country's name instead
+  if (p.natName && nation.name.toLowerCase() !== p.natName.toLowerCase() && !(p.nat && nationByCode(p.nat))) return <span className="nat"><span>{p.natName}</span></span>;
   return <span className="nat"><Flag nation={nation} size={size} />{withName && <span>{t(nation.name)}</span>}</span>;
 }
 

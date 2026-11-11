@@ -178,6 +178,7 @@ export class MatchScene extends Phaser.Scene {
     const look: Look = {
       skin: a.player.skin, hair: a.player.hair, hairStyle: a.player.hairStyle,
       color: gk ? setup.gkColor : setup.color, color2: setup.color2, gk,
+      pattern: (setup as { pattern?: number }).pattern ?? 0,
     };
     const key = lookKey(look);
     if (!this.textures.exists(key)) {

@@ -7,6 +7,7 @@ import { Dashboard } from './Dashboard';
 import { PlayerProfile, Squad, TrainingCenter } from './Squad';
 import { Tactics } from './Tactics';
 import { Transfers } from './Transfers';
+import { useCatalogueSync } from './CatalogueSync';
 import { League, Schedule } from './Competition';
 import { ClubPage } from './Club';
 import { Academy } from './Academy';
@@ -29,6 +30,7 @@ function Shell() {
   const { screen, go, say } = useStore();
   const club = userClub(g);
   const pending = g.offers.length;
+  useCatalogueSync();
   const [more, setMore] = useState(false);
   const content = useRef<HTMLDivElement>(null);
   // every screen starts at its top

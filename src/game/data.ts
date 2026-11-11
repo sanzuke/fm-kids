@@ -1,5 +1,6 @@
 import type { Attr, Club, FormationId, Pos, Player } from './types';
 import { ATTRS } from './types';
+import { pickReal } from './realPlayers';
 
 export function mulberry(seed: number) {
   let a = seed >>> 0;
@@ -52,13 +53,16 @@ export function rarity(ovr: number): 'bronze' | 'silver' | 'gold' | 'diamond' {
 }
 
 export function makePlayer(r: Rng, id: number, pos: Pos, target: number, minAge: number, maxAge: number, clubId: number, used: Set<string>): Player {
-  let name = '';
-  for (let k = 0; k < 20; k++) {
+  // a real footballer of this level when one is free, otherwise an invented kid
+  const real = pickReal(r, pos, target, minAge, maxAge, used);
+  let name = real?.name ?? '';
+  for (let k = 0; k < 20 && !real; k++) {
     name = `${pick(r, FIRST)} ${pick(r, LAST)}`;
     if (!used.has(name)) break;
   }
   used.add(name);
-  const age = ri(r, minAge, maxAge);
+  const age = real?.age ?? ri(r, minAge, maxAge);
+  if (real) target = real.ovr;
   const w = W[pos];
   const emph = w.map((x) => (x - 1 / 6) * 70);
   const noise = ATTRS.map(() => (r() - 0.5) * 12);

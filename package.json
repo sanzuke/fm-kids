@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "import:players": "node scripts/import-real-players.mjs"
   },
   "dependencies": {
     "phaser": "^3.90.0",

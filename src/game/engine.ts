@@ -29,6 +29,7 @@ export interface Setup {
   bench: Player[];
   captainId: number;
   isUser: boolean;
+  pattern: number;
 }
 
 export interface AgentStats {
@@ -113,7 +114,7 @@ export interface Ball {
 export interface MatchEvent {
   t: number;
   min: number;
-  type: 'kickoff' | 'goal' | 'shot' | 'save' | 'miss' | 'foul' | 'offside' | 'sub' | 'ht' | 'ft' | 'corner' | 'card' | 'tackle' | 'injury';
+  type: 'kickoff' | 'goal' | 'shot' | 'save' | 'miss' | 'foul' | 'offside' | 'sub' | 'ht' | 'ft' | 'corner' | 'card' | 'tackle' | 'injury' | 'talk';
   side: 0 | 1 | -1;
   text: string;
   pid?: number;
@@ -287,8 +288,32 @@ export class MatchEngine {
     this.scorerAgent = null;
   }
 
+  /** Half-time team talk: small boosts for the second half, different per tone. */
+  teamTalk(side: 0 | 1, kind: 'pep' | 'scold' | 'focus') {
+    for (const a of this.agents) {
+      if (a.side !== side) continue;
+      if (kind === 'pep') {
+        a.energy = Math.min(1, a.energy + 0.1);
+        a.eff.passing = clamp(a.eff.passing + 2, 5, 99);
+        a.eff.dribbling = clamp(a.eff.dribbling + 2, 5, 99);
+      } else if (kind === 'scold') {
+        a.eff.speed = clamp(a.eff.speed + 3, 5, 99);
+        a.eff.shooting = clamp(a.eff.shooting + 3, 5, 99);
+        a.energy = Math.max(0.15, a.energy - 0.06);
+      } else {
+        a.eff.defending = clamp(a.eff.defending + 3, 5, 99);
+        a.energy = Math.min(1, a.energy + 0.05);
+      }
+    }
+    const word = kind === 'pep' ? '📣 Pep talk' : kind === 'scold' ? '😤 Hard talk' : '🧠 Defensive focus';
+    this.emit('talk', side, `${word} — second half!`);
+  }
+
   resumeSecondHalf() {
     if (this.phase !== 'ht') return;
+    // the CPU manager gives their own talk
+    const aiSide: 0 | 1 = this.setups[0].isUser ? 1 : 0;
+    if (!this.setups[aiSide].isUser) this.teamTalk(aiSide, (['pep', 'scold', 'focus'] as const)[Math.floor(Math.random() * 3)]);
     this.half = 2;
     this.kickoff(this.firstKick === 0 ? 1 : 0);
     this.emit('kickoff', -1, 'Second half starts!');

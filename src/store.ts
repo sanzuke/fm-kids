@@ -25,6 +25,8 @@ interface Store {
   commit: (fn: (g: GameState) => void) => void;
   start: (inp: NewClubInput) => void;
   load: () => boolean;
+  /** Install a world loaded from the server as the running game and keep it locally. */
+  adopt: (g: GameState) => void;
   saveNow: () => void;
   wipe: () => void;
   say: (msg: string) => void;
@@ -43,6 +45,16 @@ function readSave(): GameState | null {
   } catch {
     return null;
   }
+}
+
+/** Bring a stored world up to the current game version before it is played. */
+function prepare(g: GameState) {
+  fixLineup(g);
+  // saves made before shirt numbers and the academy existed get them here
+  ensureNumbers(g);
+  ensureContracts(g);
+  openAcademy(g);
+  configureAudio(g.settings);
 }
 
 export const useStore = create<Store>((set, get) => ({
@@ -87,14 +99,14 @@ export const useStore = create<Store>((set, get) => ({
   load: () => {
     const g = readSave();
     if (!g) return false;
-    fixLineup(g);
-    // saves made before shirt numbers and the academy existed get them here
-    ensureNumbers(g);
-    ensureContracts(g);
-    openAcademy(g);
-    configureAudio(g.settings);
+    prepare(g);
     set({ g, v: 1, screen: 'dashboard' });
     return true;
+  },
+  adopt: (g) => {
+    prepare(g);
+    set({ g, v: 1, screen: 'dashboard', hasSave: true });
+    get().saveNow();
   },
   saveNow: () => {
     const g = get().g;

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useG, useStore } from '../store';
 import { Avatar, Btn, Logo, OvrBadge, PageTitle, PosBadge, Tabs } from './kit';
-import { clubOf, sortTable, topPlayers, userClub, userFixtures } from '../game/world';
+import { clubOf, isDerby, sortTable, topPlayers, userClub, userFixtures } from '../game/world';
 import { divName } from '../game/data';
 import type { Fixture, GameState } from '../game/types';
 import { t, tx } from '../i18n';
@@ -106,7 +106,7 @@ export function Schedule() {
     return (
       <div key={f.id} className="news" style={{ alignItems: 'center', cursor: 'pointer' }} title={t('See squad')} onClick={() => go('club', { id: o })}>
         <span style={{ width: 24 }}>{f.home === g.userClub ? '🏠' : '✈️'}</span>
-        <span className="grow"><b>{clubOf(g, o)!.name}</b> <span className="muted">· {tx(f.label)}</span></span>
+        <span className="grow">{isDerby(g, f) && <span className="tag orange" style={{ marginRight: 4 }}>🔥 {t('DERBY')}</span>}<b>{clubOf(g, o)!.name}</b> <span className="muted">· {tx(f.label)}</span></span>
         {f.played ? <b>{f.hg}–{f.ag}{f.pens ? ` (${f.pens[0]}–${f.pens[1]}p)` : ''}</b> : <span className="tag">{t('Matchday {n}', { n: f.step + 1 })}</span>}
       </div>
     );
@@ -121,7 +121,7 @@ export function Schedule() {
           <h2>{t('🤝 Friendly match')}</h2>
           <p className="hint">{t('Practise without risk. Friendlies pay a small reward and do not change the league.')}</p>
           <div className="row" style={{ margin: '8px 0' }}>
-            <select value={opp} onChange={(e) => setOpp(+e.target.value)} aria-label={t('Opponent')}>{g.clubs.filter((c) => !c.isUser).map((c) => <option key={c.id} value={c.id}>{c.name} ({tx(divName(c.div))})</option>)}</select>
+            <select value={opp} onChange={(e) => setOpp(+e.target.value)} aria-label={t('Opponent')}>{g.clubs.filter((c) => !c.isUser && !c.foreign).map((c) => <option key={c.id} value={c.id}>{c.name} ({tx(divName(c.div))})</option>)}</select>
             <div className="seg"><button className={home ? 'on' : ''} onClick={() => setHome(true)}>{t('🏠 Home')}</button><button className={!home ? 'on' : ''} onClick={() => setHome(false)}>{t('✈️ Away')}</button></div>
           </div>
           <div className="row">

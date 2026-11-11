@@ -1,7 +1,8 @@
 import type { Attr, Club, Fixture, GameState, Player, Pos, Step, TableRow } from './types';
 import { ATTRS, ATTR_LABEL } from './types';
-import { autoLineup, fit, slotsOf } from './formations';
-import { calcOvr, calcSalary, calcValue, clamp, createWorld, divName, makePlayer, mulberry, ri, SQUAD_SHAPE } from './data';
+import { autoLineup, fit, slotsOf, FORMATION_IDS } from './formations';
+import { calcOvr, calcSalary, calcValue, calcValue as _cv, clamp, createWorld, divName, ICONS, makePlayer, mulberry, PALETTE, ri, SQUAD_SHAPE } from './data';
+import type { Challenge, FormationId } from './types';
 import { tv } from './tuning';
 import { simulate, type MatchResult, type Setup } from './engine';
 
@@ -64,6 +65,7 @@ export function newGame(inp: NewClubInput): GameState {
     fixtures: [], nextFixtureId: 1, steps: [], tables: [[], [], []],
     cup: { teams: [], round: 0, winner: null }, tourn: { teams: [], round: 0, winner: null },
     balance: 3000, facilities: { training: 1, stadium: 1, youth: 1 }, txns: [], balanceHistory: [3000],
+    rival: -1, challenge: null, continental: null, kitOwned: [0],
     news: [], newsId: 1, offers: [], offerId: 1, trophies: [], achievements: {}, history: [],
     cards: [], friendlies: [],
     settings: { sound: true, music: true, volume: 0.6, defaultMode: 'watch' },
@@ -73,9 +75,12 @@ export function newGame(inp: NewClubInput): GameState {
   g.cards = sq.map((p) => p.id);
   g.tactics.lineup = autoLineup(sq, g.tactics.formation);
   g.tactics.captain = best(sq.filter((p) => g.tactics.lineup.includes(p.id)))?.id ?? sq[0].id;
+  g.rival = g.clubs.find((c) => !c.isUser && c.div === g.clubs[g.userClub].div)!.id;
   ensureNumbers(g);
+  ensureExtras(g);
   openAcademy(g);
   startSeason(g);
+  regenChallenge(g);
   pushNews(g, 'info', `Welcome, Manager ${inp.manager}! ${inp.name} is ready for its first season.`);
   return g;
 }
@@ -129,7 +134,7 @@ function startSeason(g: GameState) {
       for (const [h, a] of pairs) g.fixtures.push(newFixture(g, 'league', stepOfRound[r], r, h, a, d, `${divName(d)} · Round ${r + 1}`));
     });
   }
-  const others = g.clubs.filter((c) => c.id !== g.userClub).map((c) => c.id);
+  const others = g.clubs.filter((c) => c.id !== g.userClub && !c.foreign).map((c) => c.id);
   for (let i = others.length - 1; i > 0; i--) {
     const j = rnd(0, i);
     [others[i], others[j]] = [others[j], others[i]];
@@ -140,6 +145,7 @@ function startSeason(g: GameState) {
 }
 
 function prepareStep(g: GameState) {
+  regenChallenge(g);
   const st = g.steps[g.step];
   if (!st || g.fixtures.some((f) => f.step === g.step)) return;
   if (st.kind === 'cup') {
@@ -153,7 +159,7 @@ function prepareStep(g: GameState) {
     if (st.round === 0) {
       const q: number[] = [];
       for (let d = 0; d < 3; d++) q.push(...sortTable(g.tables[d]).slice(0, 2).map((r) => r.club));
-      const rest = g.clubs.filter((c) => !q.includes(c.id)).sort((a, b) => b.rep - a.rep).slice(0, 8 - q.length);
+      const rest = g.clubs.filter((c) => !c.foreign && !q.includes(c.id)).sort((a, b) => b.rep - a.rep).slice(0, 8 - q.length);
       q.push(...rest.map((c) => c.id));
       g.tourn.teams = q;
       pushNews(g, 'info', `The Kids Champions Tournament begins! ${g.tourn.teams.includes(g.userClub) ? 'You are in!' : 'You did not qualify this year.'}`);
@@ -279,7 +285,7 @@ export function makeSetup(g: GameState, clubId: number, kit: 'home' | 'away', vs
     color2 = club.awayColor2;
   }
   void vs;
-  return { clubId, name: club.name, color, color2, gkColor: '#22b573', formation, slots, mentality, style, lineup, bench, captainId: captain, isUser };
+  return { clubId, name: club.name, color, color2, gkColor: '#22b573', formation, slots, mentality, style, lineup, bench, captainId: captain, isUser, pattern: club.kitPattern ?? 0 };
 }
 
 /** Pick kits so shirts do not clash. */
@@ -383,6 +389,7 @@ export interface UserMatchOutcome {
 
 export function finishUserMatch(g: GameState, f: Fixture, res: MatchResult): UserMatchOutcome {
   applyResult(g, f, res);
+  checkChallenge(g, f, res);
   const me = g.userClub;
   const mine = f.home === me ? f.hg : f.ag;
   const theirs = f.home === me ? f.ag : f.hg;
@@ -396,7 +403,9 @@ export function finishUserMatch(g: GameState, f: Fixture, res: MatchResult): Use
   let reward = 0;
   const club = userClub(g);
   const win = tv('reward.winCoins');
-  const bonus = outcome === 'win' ? win : outcome === 'draw' ? Math.round(win / 3) : Math.round(win / 6);
+  const derby = f.comp !== 'friendly' && f.comp !== 'continental' && isDerby(g, f);
+  const dbf = derby ? 1.5 : 1;
+  const bonus = Math.round((outcome === 'win' ? win : outcome === 'draw' ? Math.round(win / 3) : Math.round(win / 6)) * dbf);
   reward += bonus;
   addMoney(g, bonus, `${f.comp === 'friendly' ? 'Friendly' : 'Match'} reward (${outcome})`);
   lines.push(`🪙 Match reward +${bonus}`);
@@ -406,6 +415,10 @@ export function finishUserMatch(g: GameState, f: Fixture, res: MatchResult): Use
     addMoney(g, gate, 'Ticket sales');
     lines.push(`🎟️ Ticket sales +${gate}`);
   }
+  if (f.comp === 'continental') {
+    continentalOutcome(g, f);
+    return { outcome, lines, reward };
+  }
   if (f.comp !== 'friendly') {
     g.gf += mine;
     g.ga += theirs;
@@ -413,8 +426,10 @@ export function finishUserMatch(g: GameState, f: Fixture, res: MatchResult): Use
     else if (mine < theirs) g.losses++;
     else g.draws++;
     const dr = outcome === 'win' ? 1.2 : outcome === 'draw' ? 0.3 : -0.4;
-    club.rep = clamp(club.rep + dr, 1, 100);
-    if (outcome === 'win') pushNews(g, 'win', `${club.name} ${mine}-${theirs} ${g.clubs[f.home === me ? f.away : f.home].name} — what a win!`);
+    club.rep = clamp(club.rep + dr + (derby ? (outcome === 'win' ? 1 : outcome === 'loss' ? -0.6 : 0.2) : 0), 1, 100);
+    const opp = g.clubs[f.home === me ? f.away : f.home].name;
+    if (derby) pushNews(g, outcome === 'win' ? 'win' : 'info', outcome === 'win' ? `🔥 Derby glory! ${club.name} ${mine}-${theirs} ${opp} — the town is yours!` : outcome === 'draw' ? `🔥 Derby: ${club.name} ${mine}-${theirs} ${opp} — honours even.` : `🔥 Derby pain: ${club.name} ${mine}-${theirs} ${opp}. Get them back next time!`);
+    else if (outcome === 'win') pushNews(g, 'win', `${club.name} ${mine}-${theirs} ${opp} — what a win!`);
   } else {
     g.friendlies.unshift(f);
     if (g.friendlies.length > 20) g.friendlies.length = 20;
@@ -433,6 +448,191 @@ export function playFriendly(g: GameState, opp: number, home: boolean): Fixture 
 export function skipStep(g: GameState) {
   if (userFixture(g)) return;
   completeStep(g);
+}
+
+/** A fresh chairman challenge for this week's match (friendly weeks get none). */
+export function regenChallenge(g: GameState) {
+  const f = userFixture(g);
+  const derby = f && (f.home === g.rival || f.away === g.rival);
+  const pool: Challenge['kind'][] = derby ? ['derby'] : ['win', 'win2', 'clean', 'three', 'young'];
+  const kind = pool[rnd(0, pool.length - 1)];
+  const reward = { win: 60, win2: 90, clean: 80, three: 90, young: 70, derby: 120 }[kind];
+  const text = {
+    win: "Chairman: win this week's match.",
+    win2: 'Chairman: win by 2 or more goals.',
+    clean: 'Chairman: keep a clean sheet.',
+    three: 'Chairman: score 3 or more goals.',
+    young: 'Chairman: win with a teenager in the starting eleven.',
+    derby: 'Chairman: win the derby!',
+  }[kind];
+  g.challenge = { kind, text, reward, done: false };
+}
+
+export const isDerby = (g: GameState, f: Pick<Fixture, 'home' | 'away'>) =>
+  g.rival !== undefined && (f.home === g.rival || f.away === g.rival) && (f.home === g.userClub || f.away === g.userClub);
+
+/** Evaluate the week's chairman challenge after a played match. */
+function checkChallenge(g: GameState, f: Fixture, res: MatchResult) {
+  const c = g.challenge;
+  if (!c || c.done || f.comp === 'friendly' || f.comp === 'continental') return;
+  const me = f.home === g.userClub;
+  const mine = me ? f.hg : f.ag;
+  const theirs = me ? f.ag : f.hg;
+  const won = mine > theirs || (!f.pens ? mine > theirs : me ? f.pens[0] > f.pens[1] : f.pens[1] > f.pens[0]);
+  const ok =
+    (c.kind === 'win' && won) ||
+    (c.kind === 'win2' && won && mine - theirs >= 2) ||
+    (c.kind === 'clean' && won && theirs === 0) ||
+    (c.kind === 'three' && mine >= 3 && won) ||
+    (c.kind === 'young' && won && g.tactics.lineup.some((id) => P(g, id)?.age !== undefined && P(g, id)!.age <= 18)) ||
+    (c.kind === 'derby' && won);
+  if (!ok) {
+    g.challenge = null; // missed: next week brings a fresh one
+    return;
+  }
+  c.done = true;
+  addMoney(g, c.reward, 'Chairman challenge reward');
+  pushNews(g, 'win', `Challenge complete: +{n} coins!`.replace('{n}', String(c.reward)));
+}
+
+// ---------- real-world clubs ----------
+/** Stable hash of a club name, so the same club always gets the same colours and badge. */
+function nameHash(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+  return h >>> 0;
+}
+
+/**
+ * The club a real player belongs to, added to the world the first time one of its players
+ * arrives. It trades like any other club but never enters a league, cup or tournament.
+ * Returns an existing club with that name when the world already has one.
+ */
+export function ensureRealClub(g: GameState, name: string): number {
+  const clean = name.trim();
+  const found = g.clubs.find((c) => c.name.toLowerCase() === clean.toLowerCase());
+  if (found) return found.id;
+  const id = g.clubs.length;
+  const h = nameHash(clean);
+  const pal = PALETTE[h % PALETTE.length];
+  g.clubs.push({
+    id, name: clean, icon: h % ICONS.length, color: pal[0], color2: pal[1], awayColor: pal[1], awayColor2: pal[0],
+    div: 3, rep: 72, stadium: 3, formation: FORMATION_IDS[h % FORMATION_IDS.length] as FormationId,
+    isUser: false, foreign: true, imported: true,
+  });
+  return id;
+}
+
+/** True for a club from abroad: a Champions Cup guest or a real-world club. */
+export const isForeignClub = (g: GameState, clubId: number) => !!g.clubs[clubId]?.foreign;
+
+// ---------- Champions Cup: guest clubs from abroad ----------
+const FOREIGN_BASE_ID = 1000; // foreign guest clubs get high club ids
+const FOREIGN_NAMES = [
+  ['Atlas Lions', '#0b6e4f', '#ffffff'], ['Kooru Kings', '#1d6fe0', '#ffd23f'], ['Vulkan Vikins', '#2d2d3a', '#ff5a5f'],
+  ['Sakura Stars', '#ff8ab5', '#1d2b53'], ['Nordkap Nix', '#5b4bdb', '#ffffff'], ['Laguna Lights', '#00b3b3', '#ffe66d'],
+];
+
+/** Build the three guest champion clubs for this season's Champions Cup. */
+function buildContinental(g: GameState) {
+  const cont = g.continental!;
+  const base = Math.round(mineAvgOvr(g));
+  const r = mulberry(g.seed + g.season * 7 + 3);
+  const used = new Set(g.players.map((p) => p.name));
+  // a returning champion meets the same guests again, brought up to its new level
+  const guests = g.clubs.filter((c) => c.foreign && !c.imported).slice(0, 3);
+  if (guests.length === 3) {
+    guests.forEach((c, i) => {
+      const sq = g.players.filter((p) => p.clubId === c.id);
+      const lift = base + [1, 5, 9][i] - Math.round(sq.reduce((a, p) => a + p.ovr, 0) / Math.max(1, sq.length));
+      for (const p of sq) {
+        p.ovr = clamp(p.ovr + lift, 30, 96);
+        p.pot = Math.max(p.pot, p.ovr);
+        p.value = calcValue(p.ovr, p.pot, p.age);
+      }
+    });
+    cont.foreignIds = guests.map((c) => c.id);
+    return;
+  }
+  for (let i = 0; i < 3; i++) {
+    const id = g.clubs.length;
+    const [name, color, color2] = FOREIGN_NAMES[i];
+    const club = { id, name, icon: (i * 7 + 1) % ICONS.length, color, color2, awayColor: color2, awayColor2: color, div: 3, rep: 70 + i * 8, stadium: 3, formation: FORMATION_IDS[id % 5] as FormationId, isUser: false, foreign: true };
+    g.clubs.push(club);
+    const ovr = base + [1, 5, 9][i];
+    for (const pos of SQUAD_SHAPE) {
+      const np = makePlayer(r, g.players.length, pos as Pos, ovr + ri(r, -3, 3), 19, 28, id, used);
+      np.pot = clamp(np.ovr + ri(r, 1, 5), np.ovr, 96);
+      np.value = calcValue(np.ovr, np.pot, np.age);
+      np.salary = calcSalary(np.value);
+      g.players.push(np);
+    }
+    cont.foreignIds.push(id);
+  }
+  ensureNumbers(g);
+}
+
+const mineAvgOvr = (g: GameState) => {
+  const xi = g.tactics.lineup.map((id) => P(g, id)).filter(Boolean);
+  return xi.reduce((s, p) => s + p.ovr, 0) / (xi.length || 1);
+};
+
+/** Create the next Champions Cup fixture, played like a friendly (it does not advance the week). */
+export function playContinental(g: GameState): Fixture | null {
+  const cont = g.continental;
+  if (!cont || !cont.qualified || cont.failed) return null;
+  if (!cont.foreignIds.length) buildContinental(g); // safety: the guest clubs always exist before a round
+  const oppId = cont.foreignIds[cont.round];
+  const f = newFixture(g, 'continental', -2, cont.round, g.userClub, oppId, -1, `🌍 Champions Cup · Round ${cont.round + 1}`);
+  cont.oppId = oppId;
+  return f;
+}
+
+/** Win or lose a Champions Cup round. */
+export function continentalOutcome(g: GameState, f: Fixture) {
+  const cont = g.continental!;
+  const mine = f.home === g.userClub ? f.hg : f.ag;
+  const theirs = f.home === g.userClub ? f.ag : f.hg;
+  const won = mine > theirs || (f.pens ? (f.home === g.userClub ? f.pens[0] > f.pens[1] : f.pens[1] > f.pens[0]) : mine > theirs);
+  if (won) {
+    cont.round++;
+    addMoney(g, 800, 'Champions Cup round bonus');
+    pushNews(g, 'win', `🌍 Champions Cup: you beat {a} and reach the next round!`.replace('{a}', g.clubs[f.home === g.userClub ? f.away : f.home].name));
+    if (cont.round >= 3) {
+      cont.qualified = false;
+      cont.round = 0;
+      g.trophies.push({ season: g.season, name: '🌍 Champions Cup', icon: '🌍' });
+      addMoney(g, 5000, 'Champions of the continent prize');
+      userClub(g).rep = clamp(userClub(g).rep + 10, 1, 100);
+      pushNews(g, 'trophy', '🌍 CHAMPIONS OF THE CONTINENT! The whole world knows your club now!');
+    }
+  } else {
+    cont.qualified = false;
+    cont.failed = true;
+    pushNews(g, 'info', 'You are out of the Champions Cup. Win the top flight again to return!');
+  }
+  checkAchievements(g);
+}
+
+// ---------- kit shop ----------
+export const KIT_PATTERNS = ['Solid', 'Vertical stripes', 'Hoops', 'Halves'];
+export const kitPrice = (p: number) => [0, 400, 400, 600][p] ?? 0;
+
+export function buyKit(g: GameState, pattern: number): string | null {
+  g.kitOwned ??= [0];
+  if (g.kitOwned.includes(pattern)) return 'You already own this kit.';
+  const price = kitPrice(pattern);
+  if (g.balance < price) return 'Not enough coins.';
+  addMoney(g, -price, `Kit: ${KIT_PATTERNS[pattern]}`);
+  g.kitOwned!.push(pattern);
+  return null;
+}
+
+export function wearKit(g: GameState, pattern: number): string | null {
+  g.kitOwned ??= [0];
+  if (!g.kitOwned.includes(pattern)) return 'Buy the kit first.';
+  userClub(g).kitPattern = pattern;
+  return null;
 }
 
 function completeStep(g: GameState) {
@@ -683,7 +883,7 @@ export function sellNow(g: GameState, pid: number, amount: number, to?: number):
   const p = P(g, pid);
   if (userSquad(g).length <= MIN_SQUAD) return `You need at least ${MIN_SQUAD} players in your squad.`;
   if (p.loan) return 'Loaned players cannot be sold.';
-  const buyers = g.clubs.filter((c) => !c.isUser);
+  const buyers = g.clubs.filter((c) => !c.isUser && !c.foreign);
   const club = to !== undefined ? g.clubs[to] : buyers[rnd(0, buyers.length - 1)];
   p.clubId = club.id;
   p.contract = 1 + (p.id % 3); // the buyer signs them on a fresh deal
@@ -707,7 +907,7 @@ export function rejectOffer(g: GameState, offerId: number) {
 function genOffers(g: GameState) {
   const sq = userSquad(g).filter((p) => !p.loan);
   if (sq.length <= MIN_SQUAD) return;
-  const buyers = g.clubs.filter((c) => !c.isUser);
+  const buyers = g.clubs.filter((c) => !c.isUser && !c.foreign);
   const add = (p: Player, amount: number) => {
     if (g.offers.some((o) => o.playerId === p.id)) return;
     const from = buyers[rnd(0, buyers.length - 1)].id;
@@ -731,9 +931,14 @@ function genOffers(g: GameState) {
 function aiTransfers(g: GameState) {
   for (let k = 0; k < 2; k++) {
     const p = g.players[rnd(0, g.players.length - 1)];
-    if (p.clubId === g.userClub || p.clubId === ACADEMY || p.loan) continue;
-    const dest = g.clubs.filter((c) => !c.isUser && c.id !== p.clubId);
-    const to = dest[rnd(0, dest.length - 1)];
+    if (p.clubId === g.userClub || p.clubId === ACADEMY || p.clubId >= FOREIGN_BASE_ID || isForeignClub(g, p.clubId) || p.loan) continue;
+    const dest = g.clubs
+      .filter((c) => !c.isUser && !c.foreign && c.id !== p.clubId)
+      .sort((a, b) => squadOf(g, a.id).filter((x) => x.pos === p.pos).length - squadOf(g, b.id).filter((x) => x.pos === p.pos).length);
+    const to = dest[0];
+    if (!to) continue;
+    const destAvg = squadOf(g, to.id).reduce((s, q) => s + q.ovr, 0) / (squadOf(g, to.id).length || 1);
+    if (p.ovr < destAvg - 6) continue; // only sign someone who actually improves them
     if (p.clubId >= 0) {
       const sq = squadOf(g, p.clubId);
       if (sq.length <= 14) continue;
@@ -780,6 +985,17 @@ export function ensureNumbers(g: GameState) {
 
 /** The shirt number shown for a player, or undefined when they have no club. */
 export const shirtOf = (p: Pick<Player, 'num' | 'numClub' | 'clubId'>) => (p.clubId >= 0 && p.numClub === p.clubId ? p.num : undefined);
+
+/** Newer fields for old saves: eternal rival, challenge slot, kit shop, Champions Cup. */
+export function ensureExtras(g: GameState) {
+  if (g.rival === undefined) {
+    const me = g.clubs[g.userClub];
+    g.rival = g.clubs.find((c) => !c.isUser && c.div === me.div)!.id;
+  }
+  g.kitOwned ??= [0];
+  g.continental ??= null;
+  g.challenge ??= null;
+}
 
 /** Old saves had no contracts; hand those out once. New players get one when they are created. */
 export function ensureContracts(g: GameState) {
@@ -975,6 +1191,12 @@ function endSeason(g: GameState) {
     club.rep = clamp(club.rep + 8, 1, 100);
     result = 'champion';
     lines.push(`🏆 You are ${divName(oldDiv)} champions!`);
+    if (oldDiv === 0 && !g.continental?.qualified) {
+      g.continental = { qualified: true, failed: false, round: 0, oppId: -1, foreignIds: [] };
+      buildContinental(g);
+      lines.push('🌍 You will represent the league in the Champions Cup!');
+      pushNews(g, 'info', '🌍 Champions Cup: you qualified as champions! Play it from the Home screen.');
+    }
   }
   // promotion & relegation for everybody
   const moves: [number, number][] = [];
@@ -992,6 +1214,14 @@ function endSeason(g: GameState) {
     }
   }
   g.history.push({ season: g.season, div: oldDiv, pos });
+  // the rival has to share your division, or there is no derby to play
+  if (g.rival === undefined || g.clubs[g.rival]?.div !== club.div) {
+    const near = g.clubs.filter((c) => !c.isUser && c.div === club.div).sort((a, b) => Math.abs(a.rep - club.rep) - Math.abs(b.rep - club.rep))[0];
+    if (near) {
+      g.rival = near.id;
+      pushNews(g, 'info', `🔥 New rival: ${near.name}! Two derbies await this season.`);
+    }
+  }
   if (club.div < 2 || result === 'promoted' || result === 'champion') g.achievements.promo_flag = g.season;
   // development
   const youthBoost = 0;
@@ -1002,10 +1232,21 @@ function endSeason(g: GameState) {
     }
     developPlayer(p, p.clubId === me ? Math.floor((g.facilities.training - 1) / 2) + youthBoost : p.clubId === ACADEMY ? Math.floor((g.facilities.youth - 1) / 2) : 0);
   }
+  // CPU clubs push their own best young players, scaled by their division
+  for (const c of g.clubs) {
+    if (c.isUser || c.div > 2) continue;
+    const young = squadOf(g, c.id).filter((p) => p.age <= 21 && p.ovr < p.pot).sort((a, b) => b.ovr - a.ovr).slice(0, 2);
+    for (const p of young) {
+      p.ovr = clamp(p.ovr + rnd(1, 2) + (2 - c.div), p.ovr, p.pot);
+      p.value = calcValue(p.ovr, p.pot, p.age);
+    }
+  }
   // retirements
   const used = new Set(g.players.map((p) => p.name));
   const r = mulberry(g.seed + g.season * 31);
   for (const p of g.players) {
+    // a catalogue player keeps his identity; the next catalogue refresh brings his real age and club
+    if (p.catalogId !== undefined) continue;
     if (p.age >= 36 && p.clubId !== me) {
       const pos = p.pos;
       const np = makePlayer(r, p.id, pos, clamp(p.ovr - 6, 30, 70), 16, 19, p.clubId, used);
@@ -1041,7 +1282,7 @@ function endSeason(g: GameState) {
   }
   // CPU squads topped up
   for (const c of g.clubs) {
-    if (c.isUser) continue;
+    if (c.isUser || c.foreign) continue;
     let sq = squadOf(g, c.id);
     while (sq.length < 16) {
       const counts: Record<string, number> = {};

@@ -3,7 +3,7 @@ import { useG, useStore } from '../store';
 import { Btn, Logo, Modal, OvrBadge, PosBadge, ShirtNo } from './kit';
 import { MatchEngine, type MatchResult, MATCH_SECONDS } from '../game/engine';
 import { MatchController, type MatchMode } from '../match/controller';
-import { finishUserMatch, matchSetups, playFriendly, userFixture, P, type UserMatchOutcome } from '../game/world';
+import { finishUserMatch, matchSetups, playFriendly, playContinental, userFixture, P, type UserMatchOutcome } from '../game/world';
 import type { Fixture } from '../game/types';
 import { matchAmbience, sfx } from '../audio';
 import { t, tx } from '../i18n';
@@ -61,7 +61,8 @@ export function MatchScreen() {
   const g = useG();
   const { params, go, commit, say } = useStore();
   const stageRef = useRef<HTMLDivElement>(null);
-  const [fixture] = useState<Fixture | undefined>(() => (params.friendly ? playFriendly(g, (params.friendly as { opp: number }).opp, (params.friendly as { home: boolean }).home) : userFixture(g)));
+  const [fixture] = useState<Fixture | undefined>(() =>
+    params.continental ? playContinental(g) ?? undefined : params.friendly ? playFriendly(g, (params.friendly as { opp: number }).opp, (params.friendly as { home: boolean }).home) : userFixture(g));
   const mode = ((params.mode as MatchMode) ?? g.settings.defaultMode) as MatchMode;
   const ctl = useMemo(() => {
     if (!fixture) return null;
@@ -79,6 +80,7 @@ export function MatchScreen() {
   const [subOut, setSubOut] = useState<number | null>(null);
   const [outcome, setOutcome] = useState<UserMatchOutcome | null>(null);
   const [bump, setBump] = useState(0);
+  const [talked, setTalked] = useState(false);
   const committed = useRef(false);
   const lastScore = useRef(0);
 
@@ -177,7 +179,7 @@ export function MatchScreen() {
 
   const Team = ({ i }: { i: 0 | 1 }) => {
     const st = e.setups[i];
-    const c = g.clubs[st.clubId];
+    const c = g.clubs[st.clubId] ?? { name: st.name, icon: 0 } as typeof g.clubs[number];
     // dark text on light kits (white, yellow), white text on the rest
     const light = isLight(st.color);
     return (
@@ -205,7 +207,15 @@ export function MatchScreen() {
             <div className="card pop" style={{ maxWidth: 520, width: '100%' }}>
               <h2 style={{ textAlign: 'center' }}>{t('⏸️ Half time: {a} – {b}', { a: s.score[0], b: s.score[1] })}</h2>
               <StatsPanel engine={e} res={e.result()} />
-              <div className="row" style={{ marginTop: 12, justifyContent: 'center' }}>
+              <div className="row" style={{ marginTop: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+                {(['pep', 'scold', 'focus'] as const).map((k) => (
+                  <Btn key={k} small kind={talked ? 'ghost' : 'blue'} disabled={talked}
+                    onClick={() => { e.teamTalk(userSide as 0 | 1, k); setTalked(true); setS(snap(ctl)); }}>
+                    {k === 'pep' ? t('📣 Pep talk') : k === 'scold' ? t('😤 Hard talk') : t('🧠 Focus defending')}
+                  </Btn>
+                ))}
+              </div>
+              <div className="row" style={{ marginTop: 10, justifyContent: 'center' }}>
                 <Btn kind="blue" disabled={s.subs[userSide] <= 0} onClick={() => { setSubOpen(true); }}>{t('🔄 Substitutions ({n})', { n: s.subs[userSide] })}</Btn>
                 <Btn kind="green" onClick={() => { e.resumeSecondHalf(); setS(snap(ctl)); }}>{t('▶ Second half')}</Btn>
               </div>

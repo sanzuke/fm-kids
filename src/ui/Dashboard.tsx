@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useG, useStore } from '../store';
 import { Bar, Btn, Coins, Logo, PageTitle, Stars, LineChart, Modal, StatusTags } from './kit';
-import { clubOf, currentStep, last5, skipStep, tablePos, unavailable, userClub, userFixture, userSquad } from '../game/world';
+import { clubOf, currentStep, isDerby, last5, skipStep, tablePos, unavailable, userClub, userFixture, userSquad } from '../game/world';
 import { divName, STADIUMS } from '../game/data';
 import type { Screen } from '../store';
 import { t, tx } from '../i18n';
@@ -46,7 +46,10 @@ export function Dashboard() {
                 <span style={{ fontSize: 30, fontWeight: 700 }}>VS</span>
                 <div style={{ textAlign: 'center' }}><Logo icon={clubOf(g, fx.away)!.icon} color={clubOf(g, fx.away)!.color} color2={clubOf(g, fx.away)!.color2} size={64} /><div><b>{clubOf(g, fx.away)!.name}</b></div></div>
               </div>
-              <p className="muted" style={{ textAlign: 'center' }}>{tx(fx.label)} · {fx.home === g.userClub ? t('🏠 Home at {stadium}', { stadium: STADIUMS[club.stadium].name }) : t('✈️ Away')}</p>
+              <p className="muted" style={{ textAlign: 'center' }}>
+                {isDerby(g, fx) && <span className="tag orange" style={{ marginRight: 6 }}>{t('🔥 DERBY')}</span>}
+                {tx(fx.label)} · {fx.home === g.userClub ? t('🏠 Home at {stadium}', { stadium: STADIUMS[club.stadium].name }) : t('✈️ Away')}
+              </p>
               <div className="row" style={{ marginTop: 12, justifyContent: 'center' }}>
                 <Btn kind="green" onClick={() => go('match', { mode: 'watch' })}>{t('▶ Watch match')}</Btn>
                 <Btn kind="blue" onClick={() => go('match', { mode: 'highlights' })}>{t('✨ Highlights')}</Btn>
@@ -89,10 +92,30 @@ export function Dashboard() {
           {next.length === 0 && <p className="muted">{t('Nothing scheduled.')}</p>}
           {next.map((f) => {
             const o = clubOf(g, f.home === g.userClub ? f.away : f.home)!;
-            return <div key={f.id} className="news" style={{ cursor: 'pointer' }} title={t('See squad')} onClick={() => go('club', { id: o.id })}><span>{f.home === g.userClub ? '🏠' : '✈️'}</span><span><b>{o.name}</b> <span className="muted">· {tx(f.label)}</span></span></div>;
+            return <div key={f.id} className="news" style={{ cursor: 'pointer' }} title={t('See squad')} onClick={() => go('club', { id: o.id })}><span>{f.home === g.userClub ? '🏠' : '✈️'}</span><span>{isDerby(g, f) && <span className="tag orange" style={{ marginRight: 4 }}>🔥</span>}<b>{o.name}</b> <span className="muted">· {tx(f.label)}</span></span></div>;
           })}
           <div style={{ marginTop: 8 }}><Btn small kind="ghost" onClick={() => go('schedule')}>{t('Full schedule')}</Btn></div>
         </div>
+        {g.challenge && !g.challenge.done && fx && (
+          <div className="card" style={{ background: 'linear-gradient(120deg,#fff7d6,#ffffff)' }}>
+            <h2>{t('🎯 Chairman challenge')}</h2>
+            <p style={{ margin: '6px 0 10px' }}>{t('{text} Reward: {n} coins', { text: t(g.challenge.text), n: g.challenge.reward })}</p>
+            <p className="hint">{t("It pays out right after this week's match if you succeed!")}</p>
+          </div>
+        )}
+        {g.challenge?.done && (
+          <div className="card" style={{ background: 'linear-gradient(120deg,#e2ffe9,#ffffff)' }}>
+            <h2>{t('🎯 Challenge complete!')}</h2>
+            <p className="hint">{t('A new challenge arrives next week.')}</p>
+          </div>
+        )}
+        {g.continental?.qualified && (
+          <div className="card" style={{ background: 'linear-gradient(120deg,#e6f0ff,#ffffff)' }}>
+            <h2>{t('🌍 Champions Cup')}</h2>
+            <p style={{ margin: '6px 0 10px' }}>{t('You are the champion of the league — represent it in the Champions Cup! Round {n}: {opp}.', { n: g.continental.round + 1, opp: g.clubs[g.continental.foreignIds[g.continental.round]]?.name ?? '' })}</p>
+            <Btn kind="green" onClick={() => go('match', { mode: 'watch', continental: true })}>{t('▶ Play round {n}', { n: g.continental.round + 1 })}</Btn>
+          </div>
+        )}
         <div className="card">
           <h2>{t('📰 Club news')}</h2>
           {g.news.slice(0, 6).map((n) => <div key={n.id} className="news"><span>{n.kind === 'in' ? '✅' : n.kind === 'out' ? '👋' : n.kind === 'trophy' ? '🏆' : n.kind === 'win' ? '🎉' : n.kind === 'loan' ? '🔁' : '📣'}</span><span>{tx(n.text)}</span></div>)}

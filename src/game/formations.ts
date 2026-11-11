@@ -87,17 +87,25 @@ export function effOvr(p: Player, slot: Pos): number {
   return Math.round(p.ovr * fit(p, slot));
 }
 
-/** Greedy best XI for a formation. Returns player ids by slot. */
+/**
+ * Greedy best XI for a formation. Returns player ids by slot.
+ *
+ * Slots are filled in two passes: first every slot takes the best player who naturally plays
+ * there, then whoever is left fills the rest. Without the first pass a star striker would be
+ * put at left back just because he is the best player available, and the real striker would
+ * sit on the bench.
+ */
 export function autoLineup(squad: Player[], formation: FormationId | Slot[]): number[] {
   const slots = typeof formation === 'string' ? FORMATIONS[formation] : formation;
   const used = new Set<number>();
   const result: number[] = new Array(slots.length).fill(-1);
   const order = slots.map((_, i) => i).sort((a, b) => (slots[a].pos === 'GK' ? -1 : 0) - (slots[b].pos === 'GK' ? -1 : 0));
-  for (const i of order) {
+  const pick = (i: number, naturalOnly: boolean) => {
     let best: Player | null = null;
     let bs = -1;
     for (const p of squad) {
       if (used.has(p.id)) continue;
+      if (naturalOnly && p.pos !== slots[i].pos && !(p.extraPos ?? []).includes(slots[i].pos)) continue;
       const s = effOvr(p, slots[i].pos);
       if (s > bs) {
         bs = s;
@@ -108,6 +116,8 @@ export function autoLineup(squad: Player[], formation: FormationId | Slot[]): nu
       used.add(best.id);
       result[i] = best.id;
     }
-  }
+  };
+  for (const i of order) pick(i, true);
+  for (const i of order) if (result[i] === -1) pick(i, false);
   return result;
 }

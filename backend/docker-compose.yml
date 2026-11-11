@@ -1,0 +1,56 @@
+# Local development and test stack: `docker compose up -d db`, then run artisan through `app`.
+x-php: &php
+  build: ./docker
+  image: kfm-backend-php
+  # keep the game server available after a reboot or a Docker restart
+  restart: unless-stopped
+  user: "${KFM_UID:-1000}:${KFM_GID:-1000}"
+  working_dir: /app
+  volumes:
+    - .:/app
+  environment:
+    HOME: /tmp
+    DB_CONNECTION: pgsql
+    DB_HOST: db
+    DB_PORT: 5432
+    DB_DATABASE: kfm
+    DB_USERNAME: kfm
+    DB_PASSWORD: kfm
+    API_FOOTBALL_TOKEN: ${API_FOOTBALL_TOKEN:-}
+  depends_on:
+    db:
+      condition: service_healthy
+
+services:
+  db:
+    image: postgres:alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: kfm
+      POSTGRES_USER: kfm
+      POSTGRES_PASSWORD: kfm
+    volumes:
+      - kfm-db:/var/lib/postgresql
+      - ./docker/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kfm -d kfm"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  app:
+    <<: *php
+    command: php artisan serve --host=0.0.0.0 --port=8000
+    ports:
+      - "8000:8000"
+
+  queue:
+    <<: *php
+    command: php artisan queue:work --tries=1 --sleep=3
+
+  scheduler:
+    <<: *php
+    command: php artisan schedule:work
+
+volumes:
+  kfm-db:

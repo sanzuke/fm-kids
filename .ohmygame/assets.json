@@ -6,14 +6,20 @@
   "previews": {},
   "libraryAssets": {
     "assets/generated/image-e417189c-0e09-4f1c-aba2-bc74122830db.png": "62048a96-fba7-4389-aa7e-b063ce4decba",
-    "assets/imported/image.png": "5f673959-f9c2-4c35-aed5-71ad2637a811"
+    "assets/imported/image.png": "5f673959-f9c2-4c35-aed5-71ad2637a811",
+    "assets/imported/image-2.png": "366d51f6-4b3e-420e-b6b2-678c2eda4829",
+    "assets/imported/image-3.png": "74c4e786-8d87-4bdd-b53f-00ea6d374c94"
   },
   "origins": {
     "assets/generated/image-e417189c-0e09-4f1c-aba2-bc74122830db.png": "generated",
-    "assets/imported/image.png": "uploaded"
+    "assets/imported/image.png": "uploaded",
+    "assets/imported/image-2.png": "uploaded",
+    "assets/imported/image-3.png": "uploaded"
   },
   "purposes": {
     "assets/generated/image-e417189c-0e09-4f1c-aba2-bc74122830db.png": "asset",
-    "assets/imported/image.png": "reference"
+    "assets/imported/image.png": "reference",
+    "assets/imported/image-2.png": "reference",
+    "assets/imported/image-3.png": "reference"
   }
 }

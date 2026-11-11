@@ -90,8 +90,10 @@ export interface Look {
   color: string;
   color2: string;
   gk: boolean;
+  /** kit pattern: 0 solid, 1 vertical stripes, 2 hoops, 3 halves */
+  pattern?: number;
 }
-export const lookKey = (l: Look) => `p${l.skin}${l.hair}${l.hairStyle}${l.gk ? 'g' : ''}${l.color}${l.color2}`.replace(/#/g, '');
+export const lookKey = (l: Look) => `p${l.skin}${l.hair}${l.hairStyle}${l.gk ? 'g' : ''}${l.color}${l.color2}${l.pattern ?? 0}`.replace(/#/g, '');
 
 function shade(hex: string, amt: number) {
   const n = parseInt(hex.slice(1), 16);
@@ -240,6 +242,20 @@ function drawFigure(c: CanvasRenderingContext2D, p: Pose, look: Look) {
   if (!look.gk) {
     c.fillStyle = look.color2;
     c.fillRect(-6.5, -9, 13, 3.2);
+    const pat = look.pattern ?? 0;
+    if (pat === 1) { // vertical stripes
+      c.fillStyle = look.color2;
+      c.fillRect(-6.5, -15, 3.4, 16);
+      c.fillRect(3.1, -15, 3.4, 16);
+    } else if (pat === 2) { // hoops
+      c.fillStyle = look.color2;
+      c.fillRect(-6.5, -15, 13, 3.6);
+      c.fillRect(-6.5, -8.2, 13, 3.6);
+      c.fillRect(-6.5, -1.4, 13, 1.4);
+    } else if (pat === 3) { // halves
+      c.fillStyle = look.color2;
+      c.fillRect(-6.5, -15, 6.5, 16);
+    }
   }
   c.fillStyle = look.gk ? '#222b45' : look.color2;
   c.beginPath();
