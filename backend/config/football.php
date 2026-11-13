@@ -29,6 +29,11 @@ return [
     'min_minutes' => 270,
     'rating' => ['pivot' => 6.0, 'overall_at_pivot' => 45, 'per_point' => 23, 'min' => 30, 'max' => 92, 'unrated' => 55],
 
+    // where the API has no match rating at all, the overall comes from playing time instead:
+    // floor for a player who never played (spread a little by player id), up to full_season more
+    // for playing every minute, and a bonus for goals and assists
+    'estimate' => ['floor' => 42, 'idle_spread' => 5, 'full_season' => 18, 'full_season_minutes' => 2700, 'per_goal' => 0.5, 'per_assist' => 0.25, 'max_bonus' => 8],
+
     // the API only names a line; the exact position is spread over these by player id
     'positions' => [
         'Goalkeeper' => ['GK'],

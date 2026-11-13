@@ -1,6 +1,9 @@
 import { create } from 'zustand';
 import type { GameState } from './game/types';
 import { newGame, SAVE_KEY, ensureContracts, ensureNumbers, fixLineup, openAcademy, type NewClubInput } from './game/world';
+import { createRealWorld, type RealStart } from './game/realWorld';
+import { applyCatalogue } from './game/catalogue';
+import type { ServerPlayer } from './api/server';
 import { configureAudio } from './audio';
 import { getLang, setLang as applyLang, tx, type Lang } from './i18n';
 
@@ -23,7 +26,8 @@ interface Store {
   setLang: (l: Lang) => void;
   go: (s: Screen, params?: Record<string, unknown>) => void;
   commit: (fn: (g: GameState) => void) => void;
-  start: (inp: NewClubInput) => void;
+  /** `real` starts the save at a real club, with the catalogue that was just loaded for it. */
+  start: (inp: NewClubInput, real?: { start: RealStart; catalogue: ServerPlayer[] }) => void;
   load: () => boolean;
   /** Install a world loaded from the server as the running game and keep it locally. */
   adopt: (g: GameState) => void;
@@ -91,8 +95,10 @@ export const useStore = create<Store>((set, get) => ({
     window.clearTimeout(saveTimer);
     saveTimer = window.setTimeout(() => get().saveNow(), 400);
   },
-  start: (inp) => {
-    const g = newGame(inp);
+  start: (inp, real) => {
+    const g = real ? newGame(inp, (seed) => createRealWorld(seed, inp, real.start, real.catalogue)) : newGame(inp);
+    // the catalogue is already here: bring in the rest of it (the other leagues) and mark the season as loaded
+    if (real) applyCatalogue(g, real.catalogue, g.season);
     set({ g, v: 1, screen: 'dashboard', hasSave: true });
     get().saveNow();
   },

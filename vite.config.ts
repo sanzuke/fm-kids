@@ -10,7 +10,8 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/kfm/api': { target: backend, changeOrigin: true, rewrite: (path) => path.replace(/^\/kfm/, '') },
+      // the preview may serve the game under a base path, so the prefix before /kfm/api varies
+      '^(/.*)?/kfm/api/': { target: backend, changeOrigin: true, rewrite: (path) => path.replace(/^.*\/kfm\/api\//, '/api/') },
     },
   },
   build: { chunkSizeWarningLimit: 2000 },

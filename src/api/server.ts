@@ -302,6 +302,29 @@ export async function fetchCataloguePlayers(
   return out;
 }
 
+/** A club of the catalogue, with the league it plays in and how many players the catalogue lists for it. */
+export interface CatalogueClub {
+  id: number;
+  name: string;
+  league: string | null;
+  is_fictional: boolean;
+  players: number;
+}
+
+/** Every club the catalogue knows. */
+export async function fetchCatalogueClubs(): Promise<CatalogueClub[]> {
+  const out: CatalogueClub[] = [];
+  let page = 1;
+  let lastPage = 1;
+  do {
+    const body = await request<Envelope<CatalogueClub[]>>(`/clubs?per_page=100&page=${page}`);
+    out.push(...body.data);
+    lastPage = body.meta?.last_page ?? 1;
+    page++;
+  } while (page <= lastPage);
+  return out;
+}
+
 /** One catalogue player, with their real-world career when the server has it. */
 export async function getPlayer(id: number): Promise<ServerPlayer> {
   const body = await request<Envelope<ServerPlayer>>(`/players/${id}`);

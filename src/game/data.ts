@@ -104,7 +104,7 @@ export const STADIUMS = [
 const DIV_NAMES = ['Gold League', 'Silver League', 'Bronze League'];
 export const divName = (d: number) => DIV_NAMES[d] ?? 'League';
 
-const CPU_NAMES: string[][] = [
+export const CPU_NAMES: string[][] = [
   ['Golden Lions', 'Thunder Hawks', 'Royal Dragons', 'Sky Rockets', 'Crimson Wolves', 'Ocean Sharks', 'Star Tigers', 'Emerald Eagles'],
   ['Sunny Foxes', 'Blue Bears', 'Lucky Stars', 'Fire Pandas', 'Jungle Monkeys', 'Silver Owls', 'Purple Panthers', 'Mighty Mammoths'],
   ['Happy Hippos', 'Tiny Turtles', 'Bouncy Bunnies', 'Speedy Snails', 'Cheeky Chicks', 'Wobbly Whales', 'Zippy Zebras'],

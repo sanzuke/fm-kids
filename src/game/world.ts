@@ -3,6 +3,7 @@ import { ATTRS, ATTR_LABEL } from './types';
 import { autoLineup, fit, slotsOf, FORMATION_IDS } from './formations';
 import { calcOvr, calcSalary, calcValue, calcValue as _cv, clamp, createWorld, divName, ICONS, makePlayer, mulberry, PALETTE, ri, SQUAD_SHAPE } from './data';
 import type { Challenge, FormationId } from './types';
+import type { WorldInit } from './data';
 import { tv } from './tuning';
 import { simulate, type MatchResult, type Setup } from './engine';
 
@@ -56,15 +57,22 @@ export interface NewClubInput {
   stadium: number;
 }
 
-export function newGame(inp: NewClubInput): GameState {
+/**
+ * A new save. `build` supplies the clubs and players when the world is not the invented one
+ * (a real league, see realWorld.ts); the manager's club is always club 0.
+ */
+export function newGame(inp: NewClubInput, build?: (seed: number) => WorldInit): GameState {
   const seed = Math.floor(R() * 1e9);
-  const { clubs, players } = createWorld(seed, inp);
+  const { clubs, players } = build ? build(seed) : createWorld(seed, inp);
+  // a real squad can cost far more than the invented starter one, so the purse covers its first weeks
+  const wages = players.filter((p) => p.clubId === 0).reduce((s, p) => s + p.salary, 0);
+  const balance = build ? 3000 + Math.round((wages * 20) / 100) * 100 : 3000;
   const g: GameState = {
     v: 1, seed, season: 1, step: 0, manager: inp.manager, userClub: 0, clubs, players,
     tactics: { formation: '4-4-2', lineup: [], mentality: 1, style: 'short', captain: -1 },
     fixtures: [], nextFixtureId: 1, steps: [], tables: [[], [], []],
     cup: { teams: [], round: 0, winner: null }, tourn: { teams: [], round: 0, winner: null },
-    balance: 3000, facilities: { training: 1, stadium: 1, youth: 1 }, txns: [], balanceHistory: [3000],
+    balance, facilities: { training: 1, stadium: 1, youth: 1 }, txns: [], balanceHistory: [balance],
     rival: -1, challenge: null, continental: null, kitOwned: [0],
     news: [], newsId: 1, offers: [], offerId: 1, trophies: [], achievements: {}, history: [],
     cards: [], friendlies: [],

@@ -84,6 +84,11 @@ export const id: Dictionary = {
     'Away colour': 'Warna tandang',
     'Away stripe': 'Garis tandang',
     '🚀 Start playing!': '🚀 Mulai main!',
+    'Which club?': 'Klub yang mana?',
+    'My own club': 'Klub buatanku',
+    'A real club': 'Klub asli',
+    'Pick a league and a club. You start with its real players and play against the other clubs of that league.': 'Pilih liga dan klubnya. Kamu mulai dengan pemain aslinya dan melawan klub lain dari liga itu.',
+    '· {n} players': '· {n} pemain',
 
     // ── dashboard ──
     'Season over': 'Musim selesai',
@@ -765,6 +770,7 @@ export const id: Dictionary = {
     '{n} players': '{n} pemain',
     'Real players only': 'Hanya pemain asli',
     'Loading real players… {done}/{total}': 'Memuat pemain asli… {done}/{total}',
+    'Loading real players…': 'Memuat pemain asli…',
     'Real players could not be loaded yet. The game keeps trying on its own.': 'Pemain asli belum bisa dimuat. Game akan terus mencoba sendiri.',
     '{n} real players for Season {season}, updated {when}. New signings and the new season bring them all up to date.': '{n} pemain asli untuk Musim {season}, diperbarui {when}. Transfer terbaru dan musim baru membuat semuanya tetap terbaru.',
     'This season’s real players are not in this world yet.': 'Pemain asli musim ini belum ada di dunia ini.',

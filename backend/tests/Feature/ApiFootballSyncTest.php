@@ -84,10 +84,10 @@ class ApiFootballSyncTest extends TestCase
         $this->assertSame(2, $player->careers()->where('kind', 'transfer')->count());
         $this->assertSame('Old Town', $player->careers()->where('transfer_date', '2023-07-01')->sole()->from_club_name);
 
-        // an unrated goalkeeper still becomes a usable player
+        // a goalkeeper the API has no rating for is rated by playing time: 200 minutes -> about 43
         $keeper = PlayerExternalId::where('external_id', '4')->sole()->player;
         $this->assertSame('GK', $keeper->primary_position->value);
-        $this->assertEqualsWithDelta(55, $keeper->base_overall, 2);
+        $this->assertEqualsWithDelta(43, $keeper->base_overall, 2);
 
         // league + 2 clubs x pages + 4 transfer histories, all logged
         $this->assertSame(0, SyncLog::where('status', '!=', 'success')->count());

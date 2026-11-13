@@ -71,6 +71,9 @@ export function applyCatalogue(g: GameState, list: ServerPlayer[], season: numbe
     }
 
     let p = byId.get(sp.id) ?? byName.get(sp.name);
+    // the manager's club may be a real one: its squad is the manager's business, so a player the
+    // catalogue lists there arrives as a free agent, and one already in the world stays put
+    if (clubId === g.userClub) clubId = p && !p.loan ? p.clubId : -1;
     if (!p) {
       p = toLocalPlayer(sp, g.players.length, clubId);
       g.players.push(p);

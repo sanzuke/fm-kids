@@ -167,7 +167,11 @@ class ApiFootballImporter
 
         $r = config('football.rating');
         $rating = (int) ($stats['games']['minutes'] ?? 0) >= config('football.min_minutes') ? ($stats['games']['rating'] ?? null) : null;
-        $target = $rating === null ? $r['unrated'] : (int) round($r['overall_at_pivot'] + ((float) $rating - $r['pivot']) * $r['per_point']);
+        $target = match (true) {
+            $rating !== null => (int) round($r['overall_at_pivot'] + ((float) $rating - $r['pivot']) * $r['per_point']),
+            ($stats['games']['rating'] ?? null) === null => $this->estimate($id, $stats),
+            default => $r['unrated'],
+        };
         $target = max($r['min'], min($r['max'], $target));
 
         // seeded by the external id: importing again gives the same attributes for the same rating
@@ -193,6 +197,23 @@ class ApiFootballImporter
             'base_market_value' => $value,
             'base_wage' => $generator->wageFor($value),
         ];
+    }
+
+    /**
+     * An overall for a league the API has no match ratings for (Liga 1 Indonesia, among others):
+     * the more of the season a player played, the better they are taken to be, plus a little for
+     * goals and assists. Without this every player of such a league would get the same number.
+     */
+    private function estimate(int $id, ?array $stats): int
+    {
+        $e = config('football.estimate');
+        $minutes = (int) ($stats['games']['minutes'] ?? 0);
+        if ($minutes <= 0) {
+            return $e['floor'] + $id % $e['idle_spread'];
+        }
+        $bonus = (int) ($stats['goals']['total'] ?? 0) * $e['per_goal'] + (int) ($stats['goals']['assists'] ?? 0) * $e['per_assist'];
+
+        return (int) round($e['floor'] + $e['full_season'] * min(1, $minutes / $e['full_season_minutes']) + min($e['max_bonus'], $bonus));
     }
 
     /** The API's short name is the familiar one; only an initial ("P. Foden") is spelled out. */
